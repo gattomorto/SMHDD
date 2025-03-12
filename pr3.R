@@ -6,7 +6,6 @@
 # capire  quali task sono piu utili.
 # capire quali feature sono migliori.
 # sparse group lasso individua i task piu importanti e di ogni task, qual è la featura migliore
-rm(list=ls())
 
 library(glmnet)
 library(caret)
@@ -15,6 +14,7 @@ library(gglasso)
 library(SGL)
 library(sparsepca)
 
+rm(list=ls())
 
 data <- read_csv("DARWIN.csv", col_names = TRUE)
 data <- data[, -1]  # Remove the first column (Patient ID)
@@ -228,10 +228,20 @@ print(nonzero_counts_df)
 
 ################################ SPARSE PCA ####################################
 
-#k = 80, alpha = 0.008: 264 entries e cumulative prop 0.646 
-#k = 64, alpha = 0.008: 254 entries e cumulative prop 0.623
-#k = 64, alpha = 0.009: 241 entries e cumulative prop 0.594
-#k = 64, alpha = 0.015: 185 entries e cumulative prop 0.455
+# ottengo le variabili che partecipano nella formazione dei PC
+get_num_of_nonzero_loadings <- function(spca_result) {
+  loadings <- spca_result$loadings  
+  variable_names <- colnames(X_train)
+  loadings_df <- as.data.frame(loadings)
+  rownames(loadings_df) <- variable_names 
+  non_zero_loadings <- loadings_df[rowSums(loadings_df != 0) > 0, , drop = FALSE]
+  non_zero_loadings_abs <- abs(non_zero_loadings)
+  #print(paste("numero di variabili non zero:", nrow(non_zero_loadings)))
+  return(nrow(non_zero_loadings))
+}
+
+
+
 
 #k = 1, alpha = 0.05: 22 entries e cumulative prop 0.046
 #k = 1, alpha = 0.04: 35 entries e cumulative prop 0.062
@@ -276,42 +286,76 @@ print(nonzero_counts_df)
 #k = 50, alpha = 0.008: 251 entries e cumulative prop 0.572
 #k = 70, alpha = 0.01: 235 entries e cumulative prop 0.582
 #k = 70, alpha = 0.008: 260 entries e cumulative prop 0.634
+#k = 64, alpha = 0.008: 254 entries e cumulative prop 0.623
+#k = 64, alpha = 0.009: 241 entries e cumulative prop 0.594
+#k = 64, alpha = 0.015: 185 entries e cumulative prop 0.455
+#k = 80, alpha = 0.008: 264 entries e cumulative prop 0.646 
 #k = 100, alpha = 0.03: 75 entries e cumulative prop 0.169
 #k = 100, alpha = 0.01: 244 entries e cumulative prop 0.603
 
 
-spca_result <- spca(X_train, k = 6, alpha = 0.008, beta=1e-10,center = TRUE, scale = TRUE)
+spca_result <- spca(X_train, k = 1, alpha = 0.0, beta=1e-10,center = TRUE, scale = TRUE)
 
 # PC
 X_train_spca <- X_train %*% spca_result$loadings
 
-# ottengo le variabili che partecipano nella formazione dei PC
-loadings <- spca_result$loadings  
-variable_names <- colnames(X_train)
-loadings_df <- as.data.frame(loadings)
-rownames(loadings_df) <- variable_names 
-non_zero_loadings <- loadings_df[rowSums(loadings_df != 0) > 0, , drop = FALSE]
-non_zero_loadings_abs <- abs(non_zero_loadings)
-print(paste("numero di variabili non zero:", nrow(non_zero_loadings)))
+get_num_of_nonzero_loadings(spca_result)
 
-# per ogni feature calcolo quante volte compare
-row_names <- rownames(non_zero_loadings)
-cleaned_names <- gsub("\\d+$", "", row_names)
-name_counts <- table(cleaned_names)
-sorted_name_counts <- sort(name_counts, decreasing = TRUE)
-print(sorted_name_counts)
-print(paste("numero di feature uniche che compaiono:",length(unique(cleaned_names))))
+# nota che questa usa non_zero_loadings che è creata dentro get_num_of_nonzero_loadings()
+# # per ogni feature calcolo quante volte compare
+# row_names <- rownames(non_zero_loadings)
+# cleaned_names <- gsub("\\d+$", "", row_names)
+# name_counts <- table(cleaned_names)
+# sorted_name_counts <- sort(name_counts, decreasing = TRUE)
+# print(sorted_name_counts)
+# print(paste("numero di feature uniche che compaiono:",length(unique(cleaned_names))))
 
 summary(spca_result)
 
-
 summary <- summary(spca_result)
 cumulatve_proportion <- summary[nrow(summary), ncol(summary)]
-cumulatve_proportion
 
-ks = c(1,2,3,4,5)
-alphas = c(0.05,0.04,0.03,0.01,0.009,0.008)
 
+
+
+
+results2 <- data.frame(k = integer(),
+                      alpha = numeric(),
+                      num_nzl = integer(),
+                      explained_var = numeric(),
+                      phi = numeric(),
+                      stringsAsFactors = FALSE)
+
+ks = c(10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,150,150,180, 190,200,210)
+alphas = c(0.05,0.04,0.03,0.01,0.009,0.008,0.007, 0.006, 0.005, 0.004, 0.003)
+ks = c(1,2)
+alphas = c(0.05,0.04)
+
+for (k in ks) 
+{
+  for (alpha in alphas) 
+  {
+    cat("Current k:", k, "| Current alpha:", alpha, "\n")
+    spca_result <- spca(X_train, k = k, alpha = alpha, beta=1e-10,center = TRUE, scale = TRUE)
+    
+    num_nzl = get_num_of_nonzero_loadings(spca_result)
+    
+    summary <- summary(spca_result)
+    explained_var <- summary[nrow(summary), ncol(summary)]
+    
+    phi = (1-num_nzl/450)*explained_var
+    
+    results2 <- rbind(results2, data.frame(k = k,
+                                         alpha = alpha,
+                                         num_nzl = num_nzl,
+                                         explained_var = explained_var,
+                                         phi = phi,
+                                         stringsAsFactors = FALSE))
+    
+
+    
+  }
+}
 
 
 
