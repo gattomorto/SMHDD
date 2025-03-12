@@ -325,9 +325,9 @@ results2 <- data.frame(k = integer(),
                       explained_var = numeric(),
                       phi = numeric(),
                       stringsAsFactors = FALSE)
-
-ks = c(10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,150,150,180, 190,200,210)
-alphas = c(0.05,0.04,0.03,0.01,0.009,0.008,0.007, 0.006, 0.005, 0.004, 0.003)
+#migliore: k = 70, alpha = 0.009, phi = 0.2977333
+ks = c(10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,150,150,180, 190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450)
+alphas = c(0.05, 0.045, 0.04,0.035,0.03,0.025,0.02,0.015,0.01,0.009,0.008,0.007, 0.006, 0.005, 0.004, 0.003)
 ks = c(1,2)
 alphas = c(0.05,0.04)
 
@@ -336,7 +336,7 @@ for (k in ks)
   for (alpha in alphas) 
   {
     cat("Current k:", k, "| Current alpha:", alpha, "\n")
-    spca_result <- spca(X_train, k = k, alpha = alpha, beta=1e-10,center = TRUE, scale = TRUE)
+    spca_result <- spca(X_train, k = k, alpha = alpha, beta=1e-10,center = TRUE, scale = TRUE, verbose = FALSE)
     
     num_nzl = get_num_of_nonzero_loadings(spca_result)
     
