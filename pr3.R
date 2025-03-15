@@ -1,18 +1,10 @@
-# the column with the header "total_time8" collects the values for the "total time" feature extracted from task #8
-# fare adaboost per mostrare il concetto di boosting?
-# puoi fare group lasso per task?
-# siamo interessati a trovare qual è il task migliore -- not all handwriting tasks are equally important for disease detection, and a targeted selection can lead to more efficient and effective diagnostic tools.
-# leggere libri su feature selection?
-# capire  quali task sono piu utili.
-# capire quali feature sono migliori.
-# sparse group lasso individua i task piu importanti e di ogni task, qual è la featura migliore
-
 library(glmnet)
 library(caret)
 library(readr)
 library(gglasso)
 library(SGL)
 library(sparsepca)
+library(reshape2)
 
 rm(list=ls())
 
@@ -31,16 +23,29 @@ y_train <- y[train_index]
 X_test <- X[-train_index, ]
 y_test <- y[-train_index]
 
-############################### PAIRWISE CORRELATION########################################
+############################ PAIRWISE CORRELATION ##############################
 
 correlation_matrix <- cor(X_train)
-library(reshape2)  # Load the reshape2 package for melt()
+# questo blocco rimuove tutte le rindondanze
 correlation_df <- melt(correlation_matrix)
 correlation_df <- correlation_df[order(-abs(correlation_df$value)), ]
 correlation_df <- correlation_df[correlation_df$Var1 != correlation_df$Var2, ]
-print(correlation_df)
+correlation_df$pair <- apply(correlation_df[, c("Var1", "Var2")], 1, function(x) paste(sort(x), collapse = "_"))
+correlation_df <- correlation_df[!duplicated(correlation_df$pair), ]
+correlation_df$pair <- NULL
 
-################################## LASSO STD########################################
+X_train <- as.data.frame(X_train)
+plot(X_train$mean_jerk_on_paper20 , X_train$total_time15 )
+
+#-------------------------------------------------------------------------------
+
+
+# Find highly correlated variables (threshold = 0.8)
+#high_corr_vars <- findCorrelation(correlation_matrix, cutoff = 0.8, names = TRUE)
+#print(high_corr_vars)
+
+################################ LASSO STD #####################################
+
 # cv_model$lambda: è la sequenza di lambda testati (100)
 # cv_model$lambda.min
 # cv_model$lamda.1se
@@ -254,49 +259,103 @@ print_feature_counts <- function(non_zero_loadings)
   
 }
 
-
-
-spca_result <- spca(X_train, k = 70, alpha = 0.009, beta=1e-10,center = TRUE, scale = TRUE)
-
-non_zero_loadings = get_nonzero_loadings(spca_result)
-print_feature_counts(non_zero_loadings)
-
-summary(spca_result)
-
-summary <- summary(spca_result)
-cumulatve_proportion <- summary[nrow(summary), ncol(summary)]
-
-
-
-results <- data.frame(k = integer(),alpha = numeric(),num_non_zero_loadings = integer(),prop_var_explained = numeric(),phi = numeric(),stringsAsFactors = FALSE)
-# migliore: k = 70, alpha = 0.009, phi = 0.2977333
-ks = c(10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,150,150,180, 190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450)
-alphas = c(0.05, 0.045, 0.04,0.035,0.03,0.025,0.02,0.015,0.01,0.009,0.008,0.007, 0.006, 0.005, 0.004, 0.003)
-ks = c(1,2)
-alphas = c(0.05,0.04)
-
-for (k in ks) 
+# per ogni task calcolo quante volte compare
+print_task_counts <- function(non_zero_loadings) 
 {
-  for (alpha in alphas) 
-  {
-    cat("Current k:", k, "| Current alpha:", alpha, "\n")
-    spca_result <- spca(X_train, k = k, alpha = alpha, beta=1e-10,center = TRUE, scale = TRUE, verbose = FALSE)
-    
-    num_nzl = nrow(get_nonzero_loadings(spca_result))
-    prop_variables_used = num_nzl/450
-    
-    summary <- summary(spca_result)
-    prop_var_explained <- summary[nrow(summary), ncol(summary)]
-    
-    # numero di variabili selezionate vs varianza spiegata
-    phi = (1-prop_variables_used)*prop_var_explained
-    
-    results <- rbind(results, list(k = k, alpha = alpha, num_non_zero_loadings = num_nzl, prop_var_explained = prop_var_explained, phi = phi))
-    
-  }
+  row_names <- rownames(non_zero_loadings)
+  modified_names <- sub(".*?(\\d+)$", "task\\1", row_names)
+  count_table <- table(modified_names)
+  sorted_table <- sort(count_table, decreasing = TRUE)
+  print(sorted_table)
+  
 }
 
 
+# meglio chiamarla optimize_phi e ritornare k_max, alpha_max
+evalute_phi <- function() 
+{
+  results <- data.frame(k = integer(),alpha = numeric(),num_non_zero_loadings = integer(),prop_var_explained = numeric(),phi = numeric(),stringsAsFactors = FALSE)
+  # migliore: k = 70, alpha = 0.009, phi = 0.2977333
+  ks = c(10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,150,150,180, 190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450)
+  alphas = c(0.05, 0.045, 0.04,0.035,0.03,0.025,0.02,0.015,0.01,0.009,0.008,0.007, 0.006, 0.005, 0.004, 0.003)
+  ks = c(1,2)
+  alphas = c(0.05,0.04)
+  
+  for (k in ks) 
+  {
+    for (alpha in alphas) 
+    {
+      cat("Current k:", k, "| Current alpha:", alpha, "\n")
+      spca_result <- spca(X_train, k = k, alpha = alpha, beta=1e-10,center = TRUE, scale = TRUE, verbose = FALSE)
+      
+      num_nzl = nrow(get_nonzero_loadings(spca_result))
+      prop_variables_used = num_nzl/450
+      
+      summary <- summary(spca_result)
+      prop_var_explained <- summary[nrow(summary), ncol(summary)]
+      
+      # numero di variabili selezionate vs varianza spiegata
+      phi = (1-prop_variables_used)*prop_var_explained
+      
+      results <- rbind(results, list(k = k, alpha = alpha, num_non_zero_loadings = num_nzl, prop_var_explained = prop_var_explained, phi = phi))
+      
+    }
+  }
+  return(results)
+}
 
 
+vv = evalute_phi()
+
+
+spca_result <- spca(X_train, k = 70, alpha = 0.009, beta=1e-10,center = TRUE, scale = TRUE)
+summary(spca_result)
+non_zero_loadings = get_nonzero_loadings(spca_result)
+print_feature_counts(non_zero_loadings)
+print_task_counts(non_zero_loadings)
+
+
+
+
+#################################### ELASTIC NET ###############################
+
+#alpha = 1: lasso
+#alpha = 0: ridge
+
+#alpha = 0.01: length(nonzero_vars) = 241, proportion = 0.88
+
+alpha_value = 1
+cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha_value, family = "binomial")
+best_lambda <- cv_fit$lambda.1se
+elastic_net_model <- glmnet(X_train, y_train, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+
+coef_enet <- coef(elastic_net_model)
+coef_values <- as.vector(coef_enet[-1])  # remove intercept
+names(coef_values) <- rownames(coef_enet)[-1] 
+nonzero_vars <- names(coef_values[coef_values != 0])
+nonzero_vars = c("total_time6")
+length(nonzero_vars)
+
+# considerando solo le variabili != 0, calcola la proporzione di 
+correlation_df_gt08 <- correlation_df[abs(correlation_df$value) > 0.8, ]
+correlation_df_gt08_en_selected <- correlation_df_gt08[correlation_df_gt08$Var1 %in% nonzero_vars | correlation_df_gt08$Var2 %in% nonzero_vars, ]
+high_cor_pair_en_present <- correlation_df_gt08_en_selected$Var1 %in% nonzero_vars & correlation_df_gt08_en_selected$Var2 %in% nonzero_vars
+mean(high_cor_pair_en_present)
+#considerare tutte le variabili ma pesate per la correlazione!!?
+
+################################################################################
+
+cor_matrix <- cor(X_train)
+
+#---------------------------
+dist_matrix <- as.dist(1 - cor_matrix)
+hc <- hclust(dist_matrix)
+plot(hc)
+clusters <- cutree(hc, h = 0.2)  # Adjust height threshold as needed
+print(clusters)
+
+#---------------------------
+
+library(corrgram)
+corrgram(data, order = TRUE, lower.panel = panel.shade, upper.panel = panel.pie)
 
