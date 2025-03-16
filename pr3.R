@@ -15,7 +15,6 @@ y <- as.factor(data[[ncol(data)]])  # Last column as response variable
 X <- as.matrix(data[, -ncol(data)]) # All other columns as predictors
 y <- as.factor(ifelse(y == "P", 1, 0))  # "P" → 1, "H" → 0
 
-# 4. Split Data into Training and Testing Sets (80/20)
 set.seed(0) 
 train_index <- createDataPartition(y, p = 0.8, list = FALSE)
 X_train <- X[train_index, ]
@@ -34,8 +33,8 @@ correlation_df$pair <- apply(correlation_df[, c("Var1", "Var2")], 1, function(x)
 correlation_df <- correlation_df[!duplicated(correlation_df$pair), ]
 correlation_df$pair <- NULL
 
-X_train <- as.data.frame(X_train)
-plot(X_train$mean_jerk_on_paper20 , X_train$total_time15 )
+#X_train <- as.data.frame(X_train)
+#plot(X_train$mean_jerk_on_paper20 , X_train$total_time15 )
 
 #-------------------------------------------------------------------------------
 
@@ -322,9 +321,11 @@ print_task_counts(non_zero_loadings)
 #alpha = 1: lasso
 #alpha = 0: ridge
 
-#alpha = 0.01: length(nonzero_vars) = 241, proportion = 0.88
+#alpha = 1: length(nonzero_vars) = 18, proportion = 0
+#alpha = 0.5: length(nonzero_vars) = 45, proportion = 0.34
+#alpha = 0: length(nonzero_vars) = 450, proportion = 1
 
-alpha_value = 1
+alpha_value = 0
 cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha_value, family = "binomial")
 best_lambda <- cv_fit$lambda.1se
 elastic_net_model <- glmnet(X_train, y_train, alpha = alpha_value, lambda = best_lambda, family = "binomial")
@@ -333,29 +334,101 @@ coef_enet <- coef(elastic_net_model)
 coef_values <- as.vector(coef_enet[-1])  # remove intercept
 names(coef_values) <- rownames(coef_enet)[-1] 
 nonzero_vars <- names(coef_values[coef_values != 0])
-nonzero_vars = c("total_time6")
+#nonzero_vars = c("total_time6")
 length(nonzero_vars)
 
-# considerando solo le variabili != 0, calcola la proporzione di 
+# considerando solo le variabili selezionate da enet, calcola la proporzione di coppie ... 
+# considero solo le coppie altamene correlate
 correlation_df_gt08 <- correlation_df[abs(correlation_df$value) > 0.8, ]
+# queste sono le coppie tale che almeno un elemento dei due compare tra le variabili selezionate da enet
 correlation_df_gt08_en_selected <- correlation_df_gt08[correlation_df_gt08$Var1 %in% nonzero_vars | correlation_df_gt08$Var2 %in% nonzero_vars, ]
+# per ogni coppia si calcola se entrambi gli elementi sono stati selezionati
 high_cor_pair_en_present <- correlation_df_gt08_en_selected$Var1 %in% nonzero_vars & correlation_df_gt08_en_selected$Var2 %in% nonzero_vars
+# la proporione di coppie in cui entrambi gli elementi sono presenti in enet rispetto a tutte le coppie in cui almeno un elemento è in enet
 mean(high_cor_pair_en_present)
+
 #considerare tutte le variabili ma pesate per la correlazione!!?
 
-################################################################################
+################################ CLUSTER ANALYSIS ######################################
 
 cor_matrix <- cor(X_train)
+cor_matrix <- cor_matrix[1:100, 1:100]
 
-#---------------------------
-dist_matrix <- as.dist(1 - cor_matrix)
-hc <- hclust(dist_matrix)
-plot(hc)
-clusters <- cutree(hc, h = 0.2)  # Adjust height threshold as needed
-print(clusters)
+abs_cor_matrix = abs(cor_matrix)
 
-#---------------------------
+threshold <- 0.7
+cor_matrix[abs_cor_matrix < threshold] <- 0  # Set values below threshold to NA
+
+
+#----------------lento-----------
 
 library(corrgram)
 corrgram(data, order = TRUE, lower.panel = panel.shade, upper.panel = panel.pie)
+
+#------------heat map-------
+
+# Heatmap of the correlation matrix
+library(ggplot2)
+library(reshape2)
+
+# Melt the correlation matrix for plotting
+melted_cor <- melt(cor_matrix)
+
+# Create a heatmap
+ggplot(data = melted_cor, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("Correlation Heatmap")
+
+#-----------------------hiecal clustering---------------------
+
+# Perform hierarchical clustering on the correlation matrix
+distance <- as.dist(1 - cor_matrix)  # Convert correlation to distance
+hc <- hclust(distance, method = "ward.D2")
+
+# Plot the dendrogram
+plot(hc, main = "Variable Clustering", xlab = "", sub = "")
+
+# Cut the dendrogram into k groups
+k <- 3  # Number of groups
+groups <- cutree(hc, k = k)
+
+# Add group labels to the original variables
+grouped_vars <- data.frame(Variable = rownames(cor_matrix), Group = groups)
+print(grouped_vars)
+
+#------------------------hierchal clustering 2---------------------------------
+
+library(Hmisc)
+# Compute variable clusters
+clusters <- varclus(X_train, similarity = "spearman")  # or "pearson"
+plot(clusters)  # Dendrogram showing clusters
+summary(clusters)  # Details of each cluster
+
+#---------------------------hierchal clust 3 ------------------------------
+
+plot(hclust(as.dist(1-abs(cor(na.omit(X_train))))))
+
+#--------------------- block heatmap 1 -------------
+
+dist_matrix <- as.dist(1 - abs(cor_matrix))  # Convert correlation to distance (1 - |correlation|)
+clustering <- hclust(dist_matrix, method = "complete")  # Hierarchical clustering
+
+library(ggcorrplot)
+
+# Reorder the correlation matrix based on clustering
+ordered_corr_matrix <- cor_matrix[clustering$order, clustering$order]
+
+ggcorrplot(ordered_corr_matrix, hc.order = TRUE, type = "lower", lab = FALSE)
+
+#--------------------- block heatmap 2 -------------
+
+
+#alternativamente
+library(pheatmap)
+pheatmap((cor_matrix), clustering_method = "complete")  
+
+
 
