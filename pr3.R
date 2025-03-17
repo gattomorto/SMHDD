@@ -316,38 +316,59 @@ print_task_counts(non_zero_loadings)
 
 
 
-#################################### ELASTIC NET ###############################
+############################ ELASTIC NET HARD TRESHOLD #############################
+#considerare tutte le variabili ma pesate per la correlazione!!?
 
 #alpha = 1: lasso
 #alpha = 0: ridge
 
-#alpha = 1: length(nonzero_vars) = 18, proportion = 0
-#alpha = 0.5: length(nonzero_vars) = 45, proportion = 0.34
-#alpha = 0: length(nonzero_vars) = 450, proportion = 1
+alphas = seq(from = 0, to = 0.08, length.out = 100)
 
-alpha_value = 0
-cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha_value, family = "binomial")
+for (alpha in alphas) 
+{
+  # enet fit
+  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  best_lambda <- cv_fit$lambda.1se
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
+  
+  # estraggo i coefficienti diversi da 0 (nonzero_vars)
+  coef_enet <- coef(elastic_net_model)
+  coef_values <- as.vector(coef_enet[-1])  
+  names(coef_values) <- rownames(coef_enet)[-1] 
+  nonzero_vars <- names(coef_values[coef_values != 0])
+
+  # considerando solo le variabili selezionate da enet, calcola la proporzione di coppie ... 
+  # considero solo le coppie altamene correlate
+  correlation_df_gt08 <- correlation_df[abs(correlation_df$value) > 0.8, ]
+  # queste sono le coppie tale che almeno un elemento dei due compare tra le variabili selezionate da enet
+  correlation_df_gt08_en_selected <- correlation_df_gt08[correlation_df_gt08$Var1 %in% nonzero_vars | correlation_df_gt08$Var2 %in% nonzero_vars, ]
+  # per ogni coppia si calcola se entrambi gli elementi sono stati selezionati
+  high_cor_pair_en_present <- correlation_df_gt08_en_selected$Var1 %in% nonzero_vars & correlation_df_gt08_en_selected$Var2 %in% nonzero_vars
+ 
+  #mean=la proporione di coppie in cui entrambi gli elementi sono presenti in enet rispetto a tutte le coppie in cui almeno un elemento è in enet
+  phi = (1-length(nonzero_vars)/450)*mean(high_cor_pair_en_present)
+  
+  cat("alpha: ",alpha," phi: ",phi,"nonzero: ",length(nonzero_vars),"prop: ",mean(high_cor_pair_en_present),"\n")
+
+}
+
+############################ ELASTIC NET SOFT TRESHOLD #############################
+
+alpha = 0.1
+cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
 best_lambda <- cv_fit$lambda.1se
-elastic_net_model <- glmnet(X_train, y_train, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
 
+# estraggo i coefficienti diversi da 0 (nonzero_vars)
 coef_enet <- coef(elastic_net_model)
-coef_values <- as.vector(coef_enet[-1])  # remove intercept
+coef_values <- as.vector(coef_enet[-1])  
 names(coef_values) <- rownames(coef_enet)[-1] 
 nonzero_vars <- names(coef_values[coef_values != 0])
-#nonzero_vars = c("total_time6")
-length(nonzero_vars)
 
-# considerando solo le variabili selezionate da enet, calcola la proporzione di coppie ... 
-# considero solo le coppie altamene correlate
-correlation_df_gt08 <- correlation_df[abs(correlation_df$value) > 0.8, ]
-# queste sono le coppie tale che almeno un elemento dei due compare tra le variabili selezionate da enet
-correlation_df_gt08_en_selected <- correlation_df_gt08[correlation_df_gt08$Var1 %in% nonzero_vars | correlation_df_gt08$Var2 %in% nonzero_vars, ]
-# per ogni coppia si calcola se entrambi gli elementi sono stati selezionati
-high_cor_pair_en_present <- correlation_df_gt08_en_selected$Var1 %in% nonzero_vars & correlation_df_gt08_en_selected$Var2 %in% nonzero_vars
-# la proporione di coppie in cui entrambi gli elementi sono presenti in enet rispetto a tutte le coppie in cui almeno un elemento è in enet
-mean(high_cor_pair_en_present)
+filtered_df <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars,
+                                  correlation_df$Var2 %in% nonzero_vars), ]
 
-#considerare tutte le variabili ma pesate per la correlazione!!?
+
 
 ################################ CLUSTER ANALYSIS ######################################
 
