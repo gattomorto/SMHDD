@@ -364,7 +364,7 @@ alphas = seq(from = 0, to = 1, length.out = 1000)
 for (alpha in alphas) 
 {
   cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-  best_lambda <- cv_fit$lambda.1se
+  best_lambda <- cv_fit$lambda.min
   elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
   
   # estraggo i coefficienti diversi da 0 (nonzero_vars)
