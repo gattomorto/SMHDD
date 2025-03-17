@@ -32,6 +32,10 @@ correlation_df <- correlation_df[correlation_df$Var1 != correlation_df$Var2, ]
 correlation_df$pair <- apply(correlation_df[, c("Var1", "Var2")], 1, function(x) paste(sort(x), collapse = "_"))
 correlation_df <- correlation_df[!duplicated(correlation_df$pair), ]
 correlation_df$pair <- NULL
+correlation_df$abs_value = abs(correlation_df$value)
+correlation_df$abs_value <- ifelse(correlation_df$abs_value > 0.8, 
+                                            correlation_df$abs_value, 
+                                            0)
 
 #X_train <- as.data.frame(X_train)
 #plot(X_train$mean_jerk_on_paper20 , X_train$total_time15 )
@@ -352,21 +356,44 @@ for (alpha in alphas)
 
 }
 
-############################ ELASTIC NET SOFT TRESHOLD #############################
+################### ELASTIC NET SOFT TRESHOLD (CORRETTO) ##########################
 
-alpha = 0.1
-cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-best_lambda <- cv_fit$lambda.1se
-elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
 
-# estraggo i coefficienti diversi da 0 (nonzero_vars)
-coef_enet <- coef(elastic_net_model)
-coef_values <- as.vector(coef_enet[-1])  
-names(coef_values) <- rownames(coef_enet)[-1] 
-nonzero_vars <- names(coef_values[coef_values != 0])
+Ps =c()
+alphas = seq(from = 0, to = 1, length.out = 1000)
+for (alpha in alphas) 
+{
+  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  best_lambda <- cv_fit$lambda.1se
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
+  
+  # estraggo i coefficienti diversi da 0 (nonzero_vars)
+  coef_enet <- coef(elastic_net_model)
+  coef_values <- as.vector(coef_enet[-1])  
+  names(coef_values) <- rownames(coef_enet)[-1] 
+  nonzero_vars <- names(coef_values[coef_values != 0])
+  #nonzero_vars
+  #nonzero_vars = c("num_of_pendown5","paper_time25","air_time24")
+  #nonzero_vars = c()
+  
+  correlation_df_enet_boundary <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars, correlation_df$Var2 %in% nonzero_vars), ]
+  P1 <- ifelse(nrow(correlation_df_enet_boundary) == 0, 0, sum(correlation_df_enet_boundary$abs_value) / nrow(correlation_df_enet_boundary))
+  correlation_df_enet_interior <- correlation_df[(correlation_df$Var1 %in% nonzero_vars) & (correlation_df$Var2 %in% nonzero_vars), ]
+  P2 <- ifelse(nrow(correlation_df_enet_interior) == 0, 1, sum(correlation_df_enet_interior$abs_value) / nrow(correlation_df_enet_interior))
+  P = (1-P1)*P2
+  Ps=c(Ps,P)
+  
+  cat("alpha: ",alpha," P: ",P,"\n")
+}
 
-filtered_df <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars,
-                                  correlation_df$Var2 %in% nonzero_vars), ]
+loess_fit <- loess(Ps ~ alphas, span = 0.3)  
+Ps_smooth <- predict(loess_fit, newdata = alphas)
+max_index <- which.max(Ps_smooth)
+alpha_max <- alphas[max_index]
+alpha_max
+P_max <- Ps_smooth[max_index]
+plot(alphas, Ps, pch = 16, col = "gray")
+lines(alphas, Ps_smooth, lwd = 2)
 
 
 
