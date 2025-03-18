@@ -6,7 +6,7 @@ library(SGL)
 library(sparsepca)
 library(reshape2)
 library(leaps)
-
+library(igraph)
 
 rm(list=ls())
 
@@ -448,7 +448,6 @@ subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big
 
 ############################### COMPONENTS ##############################################
 
-# library(igraph)
 # corr_matrix <- cor(X_train)
 # graph <- graph_from_adjacency_matrix(abs(corr_matrix) > 0.8, mode = "undirected")
 # cliques <- max_cliques(graph)
@@ -463,7 +462,7 @@ g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
 components <- components(g)
 feature_names <- colnames(X_train)
 
-sink("components_output_u.txt")
+sink("components_output1.txt")
 for (i in 1:components$no+1) {
   cat("Component", i-1, ":\n")
   cat(feature_names[components$membership == (i - 1)], "\n\n")
@@ -486,7 +485,8 @@ y_train_numeric <- ifelse(y_train == 1, 1, -1)
 
 X_train_reordered_scaled <- scale(X_train_reordered)  
 
-cv_fit <- cv.gglasso(X_train, y_train_numeric, groups, loss = "logit", pred.loss = "misclass", nfolds=10)
+#lambda = c(0.5)
+cv_fit <- cv.gglasso(X_train_reordered_scaled, y_train_numeric, groups, loss = "logit", pred.loss = "misclass", nfolds=10)
 
 #optimal_lambda <- cv_fit$lambda.1se
 optimal_lambda <- cv_fit$lambda.min
