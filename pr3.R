@@ -5,6 +5,8 @@ library(gglasso)
 library(SGL)
 library(sparsepca)
 library(reshape2)
+library(leaps)
+
 
 rm(list=ls())
 
@@ -320,45 +322,7 @@ print_task_counts(non_zero_loadings)
 
 
 
-############################ ELASTIC NET HARD TRESHOLD #############################
-#considerare tutte le variabili ma pesate per la correlazione!!?
-
-#alpha = 1: lasso
-#alpha = 0: ridge
-
-alphas = seq(from = 0, to = 0.08, length.out = 100)
-
-for (alpha in alphas) 
-{
-  # enet fit
-  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-  best_lambda <- cv_fit$lambda.1se
-  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
-  
-  # estraggo i coefficienti diversi da 0 (nonzero_vars)
-  coef_enet <- coef(elastic_net_model)
-  coef_values <- as.vector(coef_enet[-1])  
-  names(coef_values) <- rownames(coef_enet)[-1] 
-  nonzero_vars <- names(coef_values[coef_values != 0])
-
-  # considerando solo le variabili selezionate da enet, calcola la proporzione di coppie ... 
-  # considero solo le coppie altamene correlate
-  correlation_df_gt08 <- correlation_df[abs(correlation_df$value) > 0.8, ]
-  # queste sono le coppie tale che almeno un elemento dei due compare tra le variabili selezionate da enet
-  correlation_df_gt08_en_selected <- correlation_df_gt08[correlation_df_gt08$Var1 %in% nonzero_vars | correlation_df_gt08$Var2 %in% nonzero_vars, ]
-  # per ogni coppia si calcola se entrambi gli elementi sono stati selezionati
-  high_cor_pair_en_present <- correlation_df_gt08_en_selected$Var1 %in% nonzero_vars & correlation_df_gt08_en_selected$Var2 %in% nonzero_vars
- 
-  #mean=la proporione di coppie in cui entrambi gli elementi sono presenti in enet rispetto a tutte le coppie in cui almeno un elemento è in enet
-  phi = (1-length(nonzero_vars)/450)*mean(high_cor_pair_en_present)
-  
-  cat("alpha: ",alpha," phi: ",phi,"nonzero: ",length(nonzero_vars),"prop: ",mean(high_cor_pair_en_present),"\n")
-
-}
-
-################### ELASTIC NET SOFT TRESHOLD (CORRETTO) ##########################
-
-
+########################## ELASTIC NET SOFT TRESHOLD ##########################
 Ps =c()
 alphas = seq(from = 0, to = 1, length.out = 1000)
 for (alpha in alphas) 
@@ -375,10 +339,12 @@ for (alpha in alphas)
   #nonzero_vars
   #nonzero_vars = c("num_of_pendown5","paper_time25","air_time24")
   #nonzero_vars = c()
-  
+
   correlation_df_enet_boundary <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars, correlation_df$Var2 %in% nonzero_vars), ]
+  # correlazione media mancante
   P1 <- ifelse(nrow(correlation_df_enet_boundary) == 0, 0, sum(correlation_df_enet_boundary$abs_value) / nrow(correlation_df_enet_boundary))
   correlation_df_enet_interior <- correlation_df[(correlation_df$Var1 %in% nonzero_vars) & (correlation_df$Var2 %in% nonzero_vars), ]
+  # correlazione media presente
   P2 <- ifelse(nrow(correlation_df_enet_interior) == 0, 1, sum(correlation_df_enet_interior$abs_value) / nrow(correlation_df_enet_interior))
   P = (1-P1)*P2
   Ps=c(Ps,P)
@@ -395,8 +361,6 @@ P_max <- Ps_smooth[max_index]
 plot(alphas, Ps, pch = 16, col = "gray")
 lines(alphas, Ps_smooth, lwd = 2)
 
-
-
 ################################ CLUSTER ANALYSIS ######################################
 
 cor_matrix <- cor(X_train)
@@ -407,13 +371,7 @@ abs_cor_matrix = abs(cor_matrix)
 threshold <- 0.7
 cor_matrix[abs_cor_matrix < threshold] <- 0  # Set values below threshold to NA
 
-
-#----------------lento-----------
-
-library(corrgram)
-corrgram(data, order = TRUE, lower.panel = panel.shade, upper.panel = panel.pie)
-
-#------------heat map-------
+#-----heat map-------oooooooooooooooooooooooooooooooooooooooo
 
 # Heatmap of the correlation matrix
 library(ggplot2)
@@ -430,7 +388,7 @@ ggplot(data = melted_cor, aes(Var1, Var2, fill = value)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
   ggtitle("Correlation Heatmap")
 
-#-----------------------hiecal clustering---------------------
+#hiecal clustering--oooooooooooooooooooooooooooooooooooooooo
 
 # Perform hierarchical clustering on the correlation matrix
 distance <- as.dist(1 - cor_matrix)  # Convert correlation to distance
@@ -447,7 +405,7 @@ groups <- cutree(hc, k = k)
 grouped_vars <- data.frame(Variable = rownames(cor_matrix), Group = groups)
 print(grouped_vars)
 
-#------------------------hierchal clustering 2---------------------------------
+#hierchal clustering 2---oooooooooooooooooooooooooooooooooooooooo
 
 library(Hmisc)
 # Compute variable clusters
@@ -455,11 +413,11 @@ clusters <- varclus(X_train, similarity = "spearman")  # or "pearson"
 plot(clusters)  # Dendrogram showing clusters
 summary(clusters)  # Details of each cluster
 
-#---------------------------hierchal clust 3 ------------------------------
+#hierchal clust 3---oooooooooooooooooooooooooooooooooooooooo
 
 plot(hclust(as.dist(1-abs(cor(na.omit(X_train))))))
 
-#--------------------- block heatmap 1 -------------
+#block heatmap 1 ---oooooooooooooooooooooooooooooooooooooooo
 
 dist_matrix <- as.dist(1 - abs(cor_matrix))  # Convert correlation to distance (1 - |correlation|)
 clustering <- hclust(dist_matrix, method = "complete")  # Hierarchical clustering
@@ -471,12 +429,80 @@ ordered_corr_matrix <- cor_matrix[clustering$order, clustering$order]
 
 ggcorrplot(ordered_corr_matrix, hc.order = TRUE, type = "lower", lab = FALSE)
 
-#--------------------- block heatmap 2 -------------
+#block heatmap 2---oooooooooooooooooooooooooooooooooooooooo
 
 
 #alternativamente
 library(pheatmap)
 pheatmap((cor_matrix), clustering_method = "complete")  
+
+
+
+
+############################### BEST SUBSET SELECTION ##########################
+
+#in teoria ci riesce ma il massimo subset sizes = n
+data_train <- data.frame(X_train, y_train = as.numeric(y_train) - 1)  # Convert factor to numeric 0/1
+# bisogna capire se anche lasso è in realà da problemi con le variabili altamente correlate
+subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big=T)
+
+############################### COMPONENTS ##############################################
+
+# library(igraph)
+# corr_matrix <- cor(X_train)
+# graph <- graph_from_adjacency_matrix(abs(corr_matrix) > 0.8, mode = "undirected")
+# cliques <- max_cliques(graph)
+# sink("components_output_u.txt")
+# #print(cliques)
+# sink()
+
+# estrai componenti
+corr_matrix <- cor(X_train)
+adj_matrix <- abs(corr_matrix) > 0.8
+g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
+components <- components(g)
+feature_names <- colnames(X_train)
+
+sink("components_output_u.txt")
+for (i in 1:components$no+1) {
+  cat("Component", i-1, ":\n")
+  cat(feature_names[components$membership == (i - 1)], "\n\n")
+}
+sink()
+
+membership <- components$membership
+names(membership) <- NULL
+membership
+
+sorted_indices <- order(membership)  # This gives the order of columns
+sorted_indices
+X_train_reordered <- X_train[, sorted_indices]
+
+groups <- rep(seq_along(components$csize), times = components$csize)
+groups
+
+
+y_train_numeric <- ifelse(y_train == 1, 1, -1)
+
+X_train_reordered_scaled <- scale(X_train_reordered)  
+
+cv_fit <- cv.gglasso(X_train, y_train_numeric, groups, loss = "logit", pred.loss = "misclass", nfolds=10)
+
+#optimal_lambda <- cv_fit$lambda.1se
+optimal_lambda <- cv_fit$lambda.min
+
+coefficients <- coef(cv_fit, s = optimal_lambda)
+coefficients
+coefficients <- as.vector(coefficients)
+
+non_zero_indices <- which(coefficients[-1] != 0)
+non_zero_coefficients <- coefficients[non_zero_indices + 1]
+non_zero_predictors <- colnames(X_train)[non_zero_indices]
+non_zero_predictors
+
+
+
+
 
 
 
