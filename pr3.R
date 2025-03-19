@@ -145,7 +145,7 @@ group <- rep(1:25, each = 18)  # 450 predictors divided into 25 groups
 y_train_numeric <- ifelse(y_train == 1, 1, 0)
 data_list <- list(x = X_train, y = y_train_numeric)
 index <- group
-cv_fit <- cvSGL(data = data_list,standardize = TRUE, index = index, type = "logit", nfold = 10)
+cv_fit <- cvSGL(data = data_list, standardize = TRUE, index = index, type = "logit", nfold = 3)
 plot(cv_fit)
 
 #questo blocco trova lambda.min e lambda.1se
@@ -446,7 +446,7 @@ data_train <- data.frame(X_train, y_train = as.numeric(y_train) - 1)  # Convert 
 # bisogna capire se anche lasso è in realà da problemi con le variabili altamente correlate
 subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big=T)
 
-############################### COMPONENTS ##############################################
+########################## GROUP LASSO ON COMPONENTS ###########################
 
 # corr_matrix <- cor(X_train)
 # graph <- graph_from_adjacency_matrix(abs(corr_matrix) > 0.8, mode = "undirected")
@@ -462,6 +462,7 @@ g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
 components <- components(g)
 feature_names <- colnames(X_train)
 
+# stampa le componenti
 sink("components_output1.txt")
 for (i in 1:components$no+1) {
   cat("Component", i-1, ":\n")
@@ -469,36 +470,70 @@ for (i in 1:components$no+1) {
 }
 sink()
 
+# prepara i gruppi (provare a fare nella versione piu semplificata senza permutare X)
 membership <- components$membership
 names(membership) <- NULL
 membership
-
 sorted_indices <- order(membership)  # This gives the order of columns
 sorted_indices
 X_train_reordered <- X_train[, sorted_indices]
-
 groups <- rep(seq_along(components$csize), times = components$csize)
 groups
 
-
+# train 
 y_train_numeric <- ifelse(y_train == 1, 1, -1)
-
 X_train_reordered_scaled <- scale(X_train_reordered)  
-
-#lambda = c(0.5)
 cv_fit <- cv.gglasso(X_train_reordered_scaled, y_train_numeric, groups, loss = "logit", pred.loss = "misclass", nfolds=10)
-
-#optimal_lambda <- cv_fit$lambda.1se
 optimal_lambda <- cv_fit$lambda.min
 
+# chosen coefficients
 coefficients <- coef(cv_fit, s = optimal_lambda)
 coefficients
 coefficients <- as.vector(coefficients)
-
 non_zero_indices <- which(coefficients[-1] != 0)
 non_zero_coefficients <- coefficients[non_zero_indices + 1]
-non_zero_predictors <- colnames(X_train)[non_zero_indices]
+non_zero_predictors <- colnames(X_train_reordered)[non_zero_indices]
 non_zero_predictors
+
+########################## ELASTIC NET STABILITY SELECTION #####################
+# bisogna chiedere se la somma delle probabilità nella direzione feature per un dato lambda è 1
+alpha = 0.12
+elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+lambdas <- elastic_net_model$lambda
+
+num_features <- ncol(X_train)
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
+num_subsamples <- 100
+subsample_size <- floor(nrow(X_train) / 2)
+
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    
+    subsample_model <- glmnet(X_subsample, y_subsample, alpha = alpha, family = "binomial", lambda = lambda)
+    
+    coefficients <- coef(subsample_model, s = lambda)[-1]  # Exclude intercept
+    # selected_features <- which(abs(coefficients) > 1e-6)?
+    selected_features <- which(coefficients != 0)
+    selection_frequencies[lambda_idx,selected_features] <- selection_frequencies[lambda_idx,selected_features] + 1
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+
+stable_indices <- which(max_selection_probabilities >= 0.8)
+feature_names <- colnames(X_train)
+stable_feature_names <- feature_names[stable_indices]
+stable_feature_names
+
+
+
 
 
 
