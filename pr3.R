@@ -42,7 +42,7 @@ correlation_df$abs_value <- ifelse(correlation_df$abs_value > 0.8,
 #X_train <- as.data.frame(X_train)
 #plot(X_train$mean_jerk_on_paper20 , X_train$total_time15 )
 
-#-------------------------------------------------------------------------------
+
 
 
 # Find highly correlated variables (threshold = 0.8)
@@ -95,13 +95,12 @@ X_train <- scale(X_train)
 
 cv_fit <- cv.gglasso(X_train, y_train_numeric, group, loss = "logit", pred.loss = "misclass", nfolds=10)
 
+# trovo i gruppi selezionati
 optimal_lambda <- cv_fit$lambda.1se
 #optimal_lambda <- cv_fit$lambda.min
-
 coefficients <- coef(cv_fit, s = optimal_lambda)
 coefficients
 coefficients <- as.vector(coefficients)
-
 non_zero_indices <- which(coefficients[-1] != 0)
 non_zero_coefficients <- coefficients[non_zero_indices + 1]
 non_zero_predictors <- colnames(X_train)[non_zero_indices]
@@ -109,7 +108,6 @@ non_zero_predictors
 numbers <- as.numeric(gsub("[^0-9]", "", non_zero_predictors))
 unique_numbers <- unique(numbers)
 unique_numbers
-length(unique_numbers)
 
 
 # This applies the same transformation to the test set, avoiding data leakage.
@@ -125,14 +123,11 @@ group <- rep(1:18, each = 25)
 
 cv_fit <- cv.gglasso(X_train_scaled, y_train_numeric, group, loss = "logit", pred.loss = "misclass", nfolds=10)
 
-plot(cv_fit)
-
+# trovo i gruppi selezionati
 #optimal_lambda <- cv_fit$lambda.1se
 optimal_lambda <- cv_fit$lambda.1se
-
 coefficients <- coef(cv_fit, s = optimal_lambda)
 coefficients
-
 nonzero_names <- sort(rownames(coefficients)[coefficients != 0])
 nonzero_names
 nonzero_names_cleaned <- gsub("\\d+$", "", nonzero_names)
@@ -168,7 +163,7 @@ abline(v=log(lambda.1se), col="grey")
 lambda.1se_index
 lambda.min_index
 
-#tutti coefficienti con i beta
+#tutte le feature con i beta
 coefficients <- cv_fit$fit$beta[, lambda.1se_index]
 coefficients
 feature_names <- colnames(X_train)
@@ -176,7 +171,7 @@ feature_names
 all_coeff_df <- data.frame(Feature = feature_names, Coefficient = coefficients)
 print(all_coeff_df)
 
-# numero di feature diverse da 0 per ogni task
+# numero di feature diverse da 0 per ogni task -- task 9 sembra piu importante perchè ha molte feature attive
 nonzero_indices <- which(coefficients != 0)
 nonzero_counts <- table(factor(group[nonzero_indices], levels = unique(group)))
 nonzero_counts_df <- as.data.frame(nonzero_counts)
@@ -193,7 +188,7 @@ group <- rep(1:18, each = 25)
 y_train_numeric <- ifelse(y_train == 1, 1, 0)
 data_list <- list(x = X_train, y = y_train_numeric)
 index <- group
-cv_fit <- cvSGL(data = data_list,standardize = TRUE, index = index, type = "logit", nfold = 10)
+cv_fit <- cvSGL(data = data_list,standardize = TRUE, index = index, type = "logit", nfold = 3)
 plot(cv_fit)
 
 #questo blocco trova lambda.min e lambda.1se
@@ -222,19 +217,13 @@ feature_names <- colnames(X_train)
 all_coeff_df <- data.frame(Feature = feature_names, Coefficient = coefficients)
 print(all_coeff_df)
 
-# numero di feature diverse da 0 per ogni task
+# per ogni feature mostro i task in cui è usata
 nonzero_indices <- which(coefficients != 0)
 nonzero_counts <- table(factor(group[nonzero_indices], levels = unique(group)))
 nonzero_counts_df <- as.data.frame(nonzero_counts)
 colnames(nonzero_counts_df) <- c("Group", "Nonzero_Coefficients")
 nonzero_counts_df <- nonzero_counts_df[order(nonzero_counts_df$Nonzero_Coefficients), ]
 print(nonzero_counts_df)
-
-
-
-
-
-
 
 ################################ SPARSE PCA ####################################
 
@@ -531,6 +520,15 @@ stable_indices <- which(max_selection_probabilities >= 0.8)
 feature_names <- colnames(X_train)
 stable_feature_names <- feature_names[stable_indices]
 stable_feature_names
+
+
+
+
+
+
+
+
+
 
 
 
