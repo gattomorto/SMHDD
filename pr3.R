@@ -84,7 +84,7 @@ frequency_table <- table(non_zero_column_names_cleaned)
 sorted_frequency_table <- sort(frequency_table, decreasing = TRUE)
 print(sorted_frequency_table)
 
-######################### GROUP LASSO PER TASK #################################
+######################### GROUP LASSO PER TASK (old) #################################
 
 group <- rep(1:25, each = 18)  # 450 predictors divided into 25 groups
 group
@@ -94,7 +94,7 @@ y_train
 X_train <- scale(X_train)  
 
 cv_fit <- cv.gglasso(X_train, y_train_numeric, group, loss = "logit", pred.loss = "misclass", nfolds=10)
-
+plot.gglasso(cv_fit)
 # trovo i gruppi selezionati
 optimal_lambda <- cv_fit$lambda.1se
 #optimal_lambda <- cv_fit$lambda.min
@@ -113,7 +113,7 @@ unique_numbers
 # This applies the same transformation to the test set, avoiding data leakage.
 #X_test <- scale(X_test, center = attr(X_train, "scaled:center"), scale = attr(X_train, "scaled:scale"))
 
-############################ GROUP LASSO PER FEATURE ###########################
+############################ GROUP LASSO PER FEATURE (old) ###########################
  
 y_train_numeric <- ifelse(y_train == 1, 1, -1)
 ordered_indices <- order(rep(1:18, 25))
@@ -485,7 +485,6 @@ non_zero_predictors <- colnames(X_train_reordered)[non_zero_indices]
 non_zero_predictors
 
 ########################## ELASTIC NET STABILITY SELECTION #####################
-# bisogna chiedere se la somma delle probabilità nella direzione feature per un dato lambda è 1
 alpha = 0.12
 elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
 lambdas <- elastic_net_model$lambda
@@ -523,9 +522,58 @@ stable_feature_names
 
 
 
+############################# GROUP LASSO PER TASK #############################
+
+groups <- rep(1:25, each = 18) 
+y_train <- ifelse(y_train == 1, 1, 0)
+data <- list(x = X_train, y = y_train)
+#lambdas <- seq(from = 0.0129, to = 0.01, length.out = 20)#sgl alpha = 0
+#nlam = length(lambdas)
+#lambdas
+SGL_model <- SGL(data,groups, type="logit",standardize = TRUE, verbose = TRUE, alpha = 0)
+lambdas <- SGL_model$lambdas
+#lambdas = lambdas[0:3]
+lambdas
+beta_matrix <- SGL_model$beta 
+
+num_groups <- 25
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_groups )
+num_subsamples <- 100
+subsample_size <- floor(nrow(X_train) / 2)
+
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    # subsample_data?
+    data <- list(x = X_subsample, y = y_subsample)
+    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
+    beta <- subsample_model$beta
+    
+    for (gr in 1:25) 
+    {
+      # tutti i coefficienti del gruppo g (lunghezza 18)
+      beta_gr <- beta[groups == gr]
+      if (any(beta_gr != 0)) 
+      {
+        selection_frequencies[lambda_idx,gr] <- selection_frequencies[lambda_idx,gr] + 1
+      }
+    }
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+max_selection_probabilities
+stable_groups <- which(max_selection_probabilities >= 0.8)
+stable_groups
 
 
-
+########################## GROUP LASSO PER FEATURE #############################
 
 
 
