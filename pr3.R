@@ -39,9 +39,9 @@ correlation_df$abs_value <- ifelse(correlation_df$abs_value > 0.8,
                                             correlation_df$abs_value, 
                                             0)
 
-#X_train <- as.data.frame(X_train)
-#plot(X_train$mean_jerk_on_paper20 , X_train$total_time15 )
-
+X_train <- as.data.frame(X_train)
+plot(X_train$max_x_extension1 , X_train$max_y_extension1 )
+cor(X_train$max_x_extension1, X_train$max_y_extension1)
 
 
 
@@ -521,9 +521,7 @@ stable_feature_names <- feature_names[stable_indices]
 stable_feature_names
 
 
-
 ############################# GROUP LASSO PER TASK #############################
-
 groups <- rep(1:25, each = 18) 
 y_train <- ifelse(y_train == 1, 1, 0)
 data <- list(x = X_train, y = y_train)
@@ -534,6 +532,7 @@ SGL_model <- SGL(data,groups, type="logit",standardize = TRUE, verbose = TRUE, a
 lambdas <- SGL_model$lambdas
 #lambdas = lambdas[0:3]
 lambdas
+# non si usa
 beta_matrix <- SGL_model$beta 
 
 num_groups <- 25
@@ -555,6 +554,7 @@ for (lambda_idx in seq_along(lambdas))
     subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
     beta <- subsample_model$beta
     
+    # per ogni gruppo controllo se almeno un coefficiente è non nullo
     for (gr in 1:25) 
     {
       # tutti i coefficienti del gruppo g (lunghezza 18)
@@ -573,9 +573,75 @@ stable_groups <- which(max_selection_probabilities >= 0.8)
 stable_groups
 
 
-########################## GROUP LASSO PER FEATURE #############################
+############################ GROUP LASSO PER FEATURE ###########################
 
+#dati i coefficienti di un modello con un certo lambda, controlla che i coefficienti dei gruppi che siano o tutti zero o tutti non zero
+check <- function(beta_lam) {
+  for (gr in 1:18) 
+  {
+    beta_gr <- beta_lam[groups == gr]
+    if (any(beta_gr == 0.0) ) 
+    {
+      if(any(beta_gr!=0.0))
+      {
+        print("err")
+      }
+    }
+    
+    if (any(beta_gr != 0.0) ) 
+    {
+      if(any(beta_gr==0.0))
+      {
+        print("err")
+      }
+      
+    }
+    
+  }
+}
 
+groups <- rep(1:18, times = 25)
+y_train <- ifelse(y_train == 1, 1, 0)
+data <- list(x = X_train, y = y_train)
+SGL_model <- SGL(data,groups, type="logit", nlam = 5, standardize = TRUE, verbose = TRUE, alpha = 0)
+lambdas <- SGL_model$lambdas
+lambdas
+# questa non si usa
+beta_matrix <- SGL_model$beta 
+
+num_features <- 18
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
+num_subsamples <- 50
+subsample_size <- floor(nrow(X_train) / 2)
+
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    # subsample_data?
+    data <- list(x = X_subsample, y = y_subsample)
+    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
+    beta <- subsample_model$beta
+    check(beta)
+    # considero solo i primi 18 valori perchè ognuno è rappresentante di ogni gruppo
+    beta1 = beta[0:18]
+    #print(beta1)
+    # i coefficienti diversi da 0 sono selezionati
+    beta1[beta1 != 0] <- 1
+    #print(beta1)
+    selection_frequencies[lambda_idx,] <- selection_frequencies[lambda_idx,] + beta1
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+max_selection_probabilities
+stable_features <- which(max_selection_probabilities >= 0.8)
+stable_features
 
 
 
