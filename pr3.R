@@ -49,7 +49,7 @@ cor(X_train$max_x_extension1, X_train$max_y_extension1)
 #high_corr_vars <- findCorrelation(correlation_matrix, cutoff = 0.8, names = TRUE)
 #print(high_corr_vars)
 
-################################ LASSO STD #####################################
+################################ LASSO STD (to be removed) #####################################
 
 # cv_model$lambda: è la sequenza di lambda testati (100)
 # cv_model$lambda.min
@@ -84,7 +84,7 @@ frequency_table <- table(non_zero_column_names_cleaned)
 sorted_frequency_table <- sort(frequency_table, decreasing = TRUE)
 print(sorted_frequency_table)
 
-######################### GROUP LASSO PER TASK (old) #################################
+######################### GROUP LASSO PER TASK (to be removed) #################################
 
 group <- rep(1:25, each = 18)  # 450 predictors divided into 25 groups
 group
@@ -113,7 +113,7 @@ unique_numbers
 # This applies the same transformation to the test set, avoiding data leakage.
 #X_test <- scale(X_test, center = attr(X_train, "scaled:center"), scale = attr(X_train, "scaled:scale"))
 
-############################ GROUP LASSO PER FEATURE (old) ###########################
+############################ GROUP LASSO PER FEATURE (to be removed) ###########################
  
 y_train_numeric <- ifelse(y_train == 1, 1, -1)
 ordered_indices <- order(rep(1:18, 25))
@@ -134,7 +134,7 @@ nonzero_names_cleaned <- gsub("\\d+$", "", nonzero_names)
 nonzero_names_unique <- unique(nonzero_names_cleaned)
 nonzero_names_unique
 
-####################### SPARSE GROUP LASSO PER TASK ############################
+####################### SPARSE GROUP LASSO PER TASK (to be removed) ############################
 
 group <- rep(1:25, each = 18)  # 450 predictors divided into 25 groups
 y_train_numeric <- ifelse(y_train == 1, 1, 0)
@@ -179,7 +179,7 @@ colnames(nonzero_counts_df) <- c("Group", "Nonzero_Coefficients")
 nonzero_counts_df <- nonzero_counts_df[order(nonzero_counts_df$Nonzero_Coefficients), ]
 print(nonzero_counts_df)
 
-###################### SPARSE GROUP LASSO PER FEATURE ##########################
+###################### SPARSE GROUP LASSO PER FEATURE (to be removed) ##########################
 
 ordered_indices <- order(rep(1:18, 25))
 ordered_indices
@@ -225,7 +225,7 @@ colnames(nonzero_counts_df) <- c("Group", "Nonzero_Coefficients")
 nonzero_counts_df <- nonzero_counts_df[order(nonzero_counts_df$Nonzero_Coefficients), ]
 print(nonzero_counts_df)
 
-################################ SPARSE PCA ####################################
+################################ SPARSE PCA (to be removed) ####################################
 
 # ottengo le variabili che partecipano nella formazione dei PC
 get_nonzero_loadings <- function(spca_result) 
@@ -302,17 +302,17 @@ evalute_phi <- function()
 vv = evalute_phi()
 
 
-spca_result <- spca(X_train, k = 70, alpha = 0.009, beta=1e-10,center = TRUE, scale = TRUE)
+spca_result <- spca(X_train, k = 70, alpha = 0.009, beta=1e-10,center = TRUE, scale = TRUE, verbose = FALSE)
 summary(spca_result)
 non_zero_loadings = get_nonzero_loadings(spca_result)
 print_feature_counts(non_zero_loadings)
 print_task_counts(non_zero_loadings)
 
+)=()
 
 
-
-########################## ELASTIC NET SOFT TRESHOLD ##########################
-Ps =c()
+######################### ALPHA SELECTION ELASTIC NET ##########################
+Ps = c()
 alphas = seq(from = 0, to = 1, length.out = 1000)
 for (alpha in alphas) 
 {
@@ -428,61 +428,12 @@ pheatmap((cor_matrix), clustering_method = "complete")
 
 
 
-############################### BEST SUBSET SELECTION ##########################
+############################### BEST SUBSET SELECTION (to be removed) ##########################
 
 #in teoria ci riesce ma il massimo subset sizes = n
 data_train <- data.frame(X_train, y_train = as.numeric(y_train) - 1)  # Convert factor to numeric 0/1
 # bisogna capire se anche lasso è in realà da problemi con le variabili altamente correlate
 subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big=T)
-
-########################## GROUP LASSO ON COMPONENTS ###########################
-
-# corr_matrix <- cor(X_train)
-# graph <- graph_from_adjacency_matrix(abs(corr_matrix) > 0.8, mode = "undirected")
-# cliques <- max_cliques(graph)
-# sink("components_output_u.txt")
-# #print(cliques)
-# sink()
-
-# estrai componenti
-corr_matrix <- cor(X_train)
-adj_matrix <- abs(corr_matrix) > 0.8
-g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
-components <- components(g)
-feature_names <- colnames(X_train)
-
-# stampa le componenti
-sink("components_output1.txt")
-for (i in 1:components$no+1) {
-  cat("Component", i-1, ":\n")
-  cat(feature_names[components$membership == (i - 1)], "\n\n")
-}
-sink()
-
-# prepara i gruppi (provare a fare nella versione piu semplificata senza permutare X)
-membership <- components$membership
-names(membership) <- NULL
-membership
-sorted_indices <- order(membership)  # This gives the order of columns
-sorted_indices
-X_train_reordered <- X_train[, sorted_indices]
-groups <- rep(seq_along(components$csize), times = components$csize)
-groups
-
-# train 
-y_train_numeric <- ifelse(y_train == 1, 1, -1)
-X_train_reordered_scaled <- scale(X_train_reordered)  
-cv_fit <- cv.gglasso(X_train_reordered_scaled, y_train_numeric, groups, loss = "logit", pred.loss = "misclass", nfolds=10)
-optimal_lambda <- cv_fit$lambda.min
-
-# chosen coefficients
-coefficients <- coef(cv_fit, s = optimal_lambda)
-coefficients
-coefficients <- as.vector(coefficients)
-non_zero_indices <- which(coefficients[-1] != 0)
-non_zero_coefficients <- coefficients[non_zero_indices + 1]
-non_zero_predictors <- colnames(X_train_reordered)[non_zero_indices]
-non_zero_predictors
 
 ########################## ELASTIC NET STABILITY SELECTION #####################
 alpha = 0.12
@@ -642,14 +593,191 @@ max_selection_probabilities <- apply(selection_probabilities, 2, max)
 max_selection_probabilities
 stable_features <- which(max_selection_probabilities >= 0.8)
 stable_features
+########################## GROUP LASSO ON COMPONENTS (to be removed) ###########################
+
+# corr_matrix <- cor(X_train)
+# graph <- graph_from_adjacency_matrix(abs(corr_matrix) > 0.8, mode = "undirected")
+# cliques <- max_cliques(graph)
+# sink("components_output_u.txt")
+# #print(cliques)
+# sink()
+
+# estrai componenti
+corr_matrix <- cor(X_train)
+adj_matrix <- abs(corr_matrix) > 0.8
+g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
+components <- components(g)
+feature_names <- colnames(X_train)
+
+# stampa le componenti
+#sink("components_output1.txt")
+for (i in 1:components$no+1) {
+  cat("Component", i-1, ":\n")
+  cat(feature_names[components$membership == (i - 1)], "\n\n")
+}
+#sink()
+
+# prepara i gruppi (provare a fare nella versione piu semplificata senza permutare X)
+membership <- components$membership
+names(membership) <- NULL
+membership
+sorted_indices <- order(membership)  # This gives the order of columns
+sorted_indices
+X_train_reordered <- X_train[, sorted_indices] # cambia le colonne, non righe, percui non bisogna cambiare y
+groups <- rep(seq_along(components$csize), times = components$csize)
+groups
+
+# train 
+y_train_numeric <- ifelse(y_train == 1, 1, -1)
+X_train_reordered_scaled <- scale(X_train_reordered)  
+cv_fit <- cv.gglasso(X_train_reordered_scaled, y_train_numeric, groups, loss = "logit", pred.loss = "misclass", nfolds=10)
+optimal_lambda <- cv_fit$lambda.min
+
+# chosen coefficients
+coefficients <- coef(cv_fit, s = optimal_lambda)
+coefficients
+coefficients <- as.vector(coefficients)
+non_zero_indices <- which(coefficients[-1] != 0)
+non_zero_coefficients <- coefficients[non_zero_indices + 1]
+non_zero_predictors <- colnames(X_train_reordered)[non_zero_indices]
+non_zero_predictors
+
+# controlla la correttezza
+check <- function(beta_lam, num_groups) {
+  for (gr in 1:num_groups) 
+  {
+    beta_gr <- beta_lam[groups == gr]
+    if (any(beta_gr == 0.0) ) 
+    {
+      if(any(beta_gr!=0.0))
+      {
+        print("err")
+      }
+    }
+    
+    if (any(beta_gr != 0.0) ) 
+    {
+      if(any(beta_gr==0.0))
+      {
+        print("err")
+      }
+      
+    }
+    
+  }
+  print("tutto ok")
+}
+check(coefficients[-1], length(unique(groups)))
+
+# stampa i gruppi selezionati
+for (gr in 1:length(unique(groups))) 
+{
+  # tutti i coefficienti del gruppo g 
+  beta_gr <- coefficients[-1][groups == gr]
+  if (any(beta_gr != 0)) 
+  {
+    print(gr)
+  }
+}
 
 
 
+################ GROUP LASSO ON COMPONENTS STABILITY SELECTION #################
 
+check <- function(beta_lam, num_groups) {
+  for (gr in 1:num_groups) 
+  {
+    beta_gr <- beta_lam[groups == gr]
+    if (any(beta_gr == 0.0) ) 
+    {
+      if(any(beta_gr!=0.0))
+      {
+        print("err")
+      }
+    }
+    
+    if (any(beta_gr != 0.0) ) 
+    {
+      if(any(beta_gr==0.0))
+      {
+        print("err")
+      }
+      
+    }
+    
+  }
+  print("tutto ok")
+}
 
+# estrai componenti
+corr_matrix <- cor(X_train)
+adj_matrix <- abs(corr_matrix) > 0.8
+g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
+components <- components(g)
+feature_names <- colnames(X_train)
 
+# stampa le componenti
+#sink("components_output1.txt")
+for (i in 1:components$no+1)
+{
+  cat("Component", i-1, ":\n")
+  cat(feature_names[components$membership == (i - 1)], "\n\n")
+}
+#sink()
 
+membership <- components$membership
+names(membership) <- NULL
+membership
+groups = membership
+groups
+y_train <- ifelse(y_train == 1, 1, 0)
+data <- list(x = X_train, y = y_train)
+SGL_model <- SGL(data, groups, type = "logit", nlam = 5, standardize = TRUE, verbose = TRUE, alpha = 0)
+lambdas <- SGL_model$lambdas
+lambdas
+print(SGL_model)
+# e l'intercept dov'è?
+beta_matrix <- SGL_model$beta 
+num_groups = length(unique(groups))
+num_groups
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol = num_groups )
+num_subsamples <- 10
+subsample_size <- floor(nrow(X_train) / 2)
 
-
-
-
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    # subsample_data?
+    data <- list(x = X_subsample, y = y_subsample)
+    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
+    beta <- subsample_model$beta
+    #check(beta, num_groups)
+    
+    # per ogni gruppo controllo se almeno un coefficiente è non nullo
+    for (gr in 1:num_groups) 
+    {
+      # tutti i coefficienti del gruppo g 
+      beta_gr <- beta[groups == gr]
+      if (any(beta_gr != 0)) 
+      {
+        selection_frequencies[lambda_idx,gr] <- selection_frequencies[lambda_idx,gr] + 1
+      }
+    }
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+max_selection_probabilities
+stable_groups <- which(max_selection_probabilities >= 0.95)
+stable_groups
+for (stable_group in stable_groups) {
+  cat("Stable Group", stable_group, ":\n")
+  features_in_group <- feature_names[groups == stable_group]
+  cat(features_in_group, "\n\n")
+}
