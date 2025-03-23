@@ -7,6 +7,7 @@ library(sparsepca)
 library(reshape2)
 library(leaps)
 library(igraph)
+library(glasso)
 
 rm(list=ls())
 
@@ -311,288 +312,6 @@ print_task_counts(non_zero_loadings)
 )=()
 
 
-######################### ALPHA SELECTION ELASTIC NET ##########################
-Ps = c()
-alphas = seq(from = 0, to = 1, length.out = 1000)
-for (alpha in alphas) 
-{
-  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-  best_lambda <- cv_fit$lambda.min
-  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
-  
-  # estraggo i coefficienti diversi da 0 (nonzero_vars)
-  coef_enet <- coef(elastic_net_model)
-  coef_values <- as.vector(coef_enet[-1])  
-  names(coef_values) <- rownames(coef_enet)[-1] 
-  nonzero_vars <- names(coef_values[coef_values != 0])
-  #nonzero_vars
-  #nonzero_vars = c("num_of_pendown5","paper_time25","air_time24")
-  #nonzero_vars = c()
-
-  correlation_df_enet_boundary <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars, correlation_df$Var2 %in% nonzero_vars), ]
-  # correlazione media mancante
-  P1 <- ifelse(nrow(correlation_df_enet_boundary) == 0, 0, sum(correlation_df_enet_boundary$abs_value) / nrow(correlation_df_enet_boundary))
-  correlation_df_enet_interior <- correlation_df[(correlation_df$Var1 %in% nonzero_vars) & (correlation_df$Var2 %in% nonzero_vars), ]
-  # correlazione media presente
-  P2 <- ifelse(nrow(correlation_df_enet_interior) == 0, 1, sum(correlation_df_enet_interior$abs_value) / nrow(correlation_df_enet_interior))
-  P = (1-P1)*P2
-  Ps=c(Ps,P)
-  
-  cat("alpha: ",alpha," P: ",P,"\n")
-}
-
-loess_fit <- loess(Ps ~ alphas, span = 0.3)  
-Ps_smooth <- predict(loess_fit, newdata = alphas)
-max_index <- which.max(Ps_smooth)
-alpha_max <- alphas[max_index]
-alpha_max
-P_max <- Ps_smooth[max_index]
-plot(alphas, Ps, pch = 16, col = "gray")
-lines(alphas, Ps_smooth, lwd = 2)
-
-################################ CLUSTER ANALYSIS ######################################
-
-cor_matrix <- cor(X_train)
-cor_matrix <- cor_matrix[1:100, 1:100]
-
-abs_cor_matrix = abs(cor_matrix)
-
-threshold <- 0.7
-cor_matrix[abs_cor_matrix < threshold] <- 0  # Set values below threshold to NA
-
-#-----heat map-------oooooooooooooooooooooooooooooooooooooooo
-
-# Heatmap of the correlation matrix
-library(ggplot2)
-library(reshape2)
-
-# Melt the correlation matrix for plotting
-melted_cor <- melt(cor_matrix)
-
-# Create a heatmap
-ggplot(data = melted_cor, aes(Var1, Var2, fill = value)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  ggtitle("Correlation Heatmap")
-
-#hiecal clustering--oooooooooooooooooooooooooooooooooooooooo
-
-# Perform hierarchical clustering on the correlation matrix
-distance <- as.dist(1 - cor_matrix)  # Convert correlation to distance
-hc <- hclust(distance, method = "ward.D2")
-
-# Plot the dendrogram
-plot(hc, main = "Variable Clustering", xlab = "", sub = "")
-
-# Cut the dendrogram into k groups
-k <- 3  # Number of groups
-groups <- cutree(hc, k = k)
-
-# Add group labels to the original variables
-grouped_vars <- data.frame(Variable = rownames(cor_matrix), Group = groups)
-print(grouped_vars)
-
-#hierchal clustering 2---oooooooooooooooooooooooooooooooooooooooo
-
-library(Hmisc)
-# Compute variable clusters
-clusters <- varclus(X_train, similarity = "spearman")  # or "pearson"
-plot(clusters)  # Dendrogram showing clusters
-summary(clusters)  # Details of each cluster
-
-#hierchal clust 3---oooooooooooooooooooooooooooooooooooooooo
-
-plot(hclust(as.dist(1-abs(cor(na.omit(X_train))))))
-
-#block heatmap 1 ---oooooooooooooooooooooooooooooooooooooooo
-
-dist_matrix <- as.dist(1 - abs(cor_matrix))  # Convert correlation to distance (1 - |correlation|)
-clustering <- hclust(dist_matrix, method = "complete")  # Hierarchical clustering
-
-library(ggcorrplot)
-
-# Reorder the correlation matrix based on clustering
-ordered_corr_matrix <- cor_matrix[clustering$order, clustering$order]
-
-ggcorrplot(ordered_corr_matrix, hc.order = TRUE, type = "lower", lab = FALSE)
-
-#block heatmap 2---oooooooooooooooooooooooooooooooooooooooo
-
-
-#alternativamente
-library(pheatmap)
-pheatmap((cor_matrix), clustering_method = "complete")  
-
-
-
-
-############################### BEST SUBSET SELECTION (to be removed) ##########################
-
-#in teoria ci riesce ma il massimo subset sizes = n
-data_train <- data.frame(X_train, y_train = as.numeric(y_train) - 1)  # Convert factor to numeric 0/1
-# bisogna capire se anche lasso è in realà da problemi con le variabili altamente correlate
-subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big=T)
-
-########################## ELASTIC NET STABILITY SELECTION #####################
-alpha = 0.12
-elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-lambdas <- elastic_net_model$lambda
-
-num_features <- ncol(X_train)
-selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
-num_subsamples <- 100
-subsample_size <- floor(nrow(X_train) / 2)
-
-for (lambda_idx in seq_along(lambdas)) 
-{
-  lambda <- lambdas[lambda_idx]
-  print(lambda_idx)
-  for (i in 1:num_subsamples)
-  {
-    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
-    X_subsample <- X_train[subsample_indices, ]
-    y_subsample <- y_train[subsample_indices]
-    
-    subsample_model <- glmnet(X_subsample, y_subsample, alpha = alpha, family = "binomial", lambda = lambda)
-    
-    coefficients <- coef(subsample_model, s = lambda)[-1]  # Exclude intercept
-    # selected_features <- which(abs(coefficients) > 1e-6)?
-    selected_features <- which(coefficients != 0)
-    selection_frequencies[lambda_idx,selected_features] <- selection_frequencies[lambda_idx,selected_features] + 1
-  }
-}
-selection_probabilities <- selection_frequencies / num_subsamples
-max_selection_probabilities <- apply(selection_probabilities, 2, max)
-
-stable_indices <- which(max_selection_probabilities >= 0.8)
-feature_names <- colnames(X_train)
-stable_feature_names <- feature_names[stable_indices]
-stable_feature_names
-
-
-############################# GROUP LASSO PER TASK #############################
-groups <- rep(1:25, each = 18) 
-y_train <- ifelse(y_train == 1, 1, 0)
-data <- list(x = X_train, y = y_train)
-#lambdas <- seq(from = 0.0129, to = 0.01, length.out = 20)#sgl alpha = 0
-#nlam = length(lambdas)
-#lambdas
-SGL_model <- SGL(data,groups, type="logit",standardize = TRUE, verbose = TRUE, alpha = 0)
-lambdas <- SGL_model$lambdas
-#lambdas = lambdas[0:3]
-lambdas
-# non si usa
-beta_matrix <- SGL_model$beta 
-
-num_groups <- 25
-selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_groups )
-num_subsamples <- 100
-subsample_size <- floor(nrow(X_train) / 2)
-
-for (lambda_idx in seq_along(lambdas)) 
-{
-  lambda <- lambdas[lambda_idx]
-  print(lambda_idx)
-  for (i in 1:num_subsamples)
-  {
-    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
-    X_subsample <- X_train[subsample_indices, ]
-    y_subsample <- y_train[subsample_indices]
-    # subsample_data?
-    data <- list(x = X_subsample, y = y_subsample)
-    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
-    beta <- subsample_model$beta
-    
-    # per ogni gruppo controllo se almeno un coefficiente è non nullo
-    for (gr in 1:25) 
-    {
-      # tutti i coefficienti del gruppo g (lunghezza 18)
-      beta_gr <- beta[groups == gr]
-      if (any(beta_gr != 0)) 
-      {
-        selection_frequencies[lambda_idx,gr] <- selection_frequencies[lambda_idx,gr] + 1
-      }
-    }
-  }
-}
-selection_probabilities <- selection_frequencies / num_subsamples
-max_selection_probabilities <- apply(selection_probabilities, 2, max)
-max_selection_probabilities
-stable_groups <- which(max_selection_probabilities >= 0.8)
-stable_groups
-
-
-############################ GROUP LASSO PER FEATURE ###########################
-
-#dati i coefficienti di un modello con un certo lambda, controlla che i coefficienti dei gruppi che siano o tutti zero o tutti non zero
-check <- function(beta_lam) {
-  for (gr in 1:18) 
-  {
-    beta_gr <- beta_lam[groups == gr]
-    if (any(beta_gr == 0.0) ) 
-    {
-      if(any(beta_gr!=0.0))
-      {
-        print("err")
-      }
-    }
-    
-    if (any(beta_gr != 0.0) ) 
-    {
-      if(any(beta_gr==0.0))
-      {
-        print("err")
-      }
-      
-    }
-    
-  }
-}
-
-groups <- rep(1:18, times = 25)
-y_train <- ifelse(y_train == 1, 1, 0)
-data <- list(x = X_train, y = y_train)
-SGL_model <- SGL(data,groups, type="logit", nlam = 5, standardize = TRUE, verbose = TRUE, alpha = 0)
-lambdas <- SGL_model$lambdas
-lambdas
-# questa non si usa
-beta_matrix <- SGL_model$beta 
-
-num_features <- 18
-selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
-num_subsamples <- 50
-subsample_size <- floor(nrow(X_train) / 2)
-
-for (lambda_idx in seq_along(lambdas)) 
-{
-  lambda <- lambdas[lambda_idx]
-  print(lambda_idx)
-  for (i in 1:num_subsamples)
-  {
-    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
-    X_subsample <- X_train[subsample_indices, ]
-    y_subsample <- y_train[subsample_indices]
-    # subsample_data?
-    data <- list(x = X_subsample, y = y_subsample)
-    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
-    beta <- subsample_model$beta
-    check(beta)
-    # considero solo i primi 18 valori perchè ognuno è rappresentante di ogni gruppo
-    beta1 = beta[0:18]
-    #print(beta1)
-    # i coefficienti diversi da 0 sono selezionati
-    beta1[beta1 != 0] <- 1
-    #print(beta1)
-    selection_frequencies[lambda_idx,] <- selection_frequencies[lambda_idx,] + beta1
-  }
-}
-selection_probabilities <- selection_frequencies / num_subsamples
-max_selection_probabilities <- apply(selection_probabilities, 2, max)
-max_selection_probabilities
-stable_features <- which(max_selection_probabilities >= 0.8)
-stable_features
 ########################## GROUP LASSO ON COMPONENTS (to be removed) ###########################
 
 # corr_matrix <- cor(X_train)
@@ -682,6 +401,291 @@ for (gr in 1:length(unique(groups)))
 
 
 
+############################### BEST SUBSET SELECTION (to be removed) ##########################
+
+#in teoria ci riesce ma il massimo subset sizes = n
+data_train <- data.frame(X_train, y_train = as.numeric(y_train) - 1)  # Convert factor to numeric 0/1
+# bisogna capire se anche lasso è in realà da problemi con le variabili altamente correlate
+subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big=T)
+
+
+################################ CLUSTER ANALYSIS ######################################
+
+cor_matrix <- cor(X_train)
+cor_matrix <- cor_matrix[1:100, 1:100]
+
+abs_cor_matrix = abs(cor_matrix)
+
+threshold <- 0.7
+cor_matrix[abs_cor_matrix < threshold] <- 0  # Set values below threshold to NA
+
+#-----heat map-------oooooooooooooooooooooooooooooooooooooooo
+
+# Heatmap of the correlation matrix
+library(ggplot2)
+library(reshape2)
+
+# Melt the correlation matrix for plotting
+melted_cor <- melt(cor_matrix)
+
+# Create a heatmap
+ggplot(data = melted_cor, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("Correlation Heatmap")
+
+#hiecal clustering--oooooooooooooooooooooooooooooooooooooooo
+
+# Perform hierarchical clustering on the correlation matrix
+distance <- as.dist(1 - cor_matrix)  # Convert correlation to distance
+hc <- hclust(distance, method = "ward.D2")
+
+# Plot the dendrogram
+plot(hc, main = "Variable Clustering", xlab = "", sub = "")
+
+# Cut the dendrogram into k groups
+k <- 3  # Number of groups
+groups <- cutree(hc, k = k)
+
+# Add group labels to the original variables
+grouped_vars <- data.frame(Variable = rownames(cor_matrix), Group = groups)
+print(grouped_vars)
+
+#hierchal clustering 2---oooooooooooooooooooooooooooooooooooooooo
+
+library(Hmisc)
+# Compute variable clusters
+clusters <- varclus(X_train, similarity = "spearman")  # or "pearson"
+plot(clusters)  # Dendrogram showing clusters
+summary(clusters)  # Details of each cluster
+
+#hierchal clust 3---oooooooooooooooooooooooooooooooooooooooo
+
+plot(hclust(as.dist(1-abs(cor(na.omit(X_train))))))
+
+#block heatmap 1 ---oooooooooooooooooooooooooooooooooooooooo
+
+dist_matrix <- as.dist(1 - abs(cor_matrix))  # Convert correlation to distance (1 - |correlation|)
+clustering <- hclust(dist_matrix, method = "complete")  # Hierarchical clustering
+
+library(ggcorrplot)
+
+# Reorder the correlation matrix based on clustering
+ordered_corr_matrix <- cor_matrix[clustering$order, clustering$order]
+
+ggcorrplot(ordered_corr_matrix, hc.order = TRUE, type = "lower", lab = FALSE)
+
+#block heatmap 2---oooooooooooooooooooooooooooooooooooooooo
+
+
+#alternativamente
+library(pheatmap)
+pheatmap((cor_matrix), clustering_method = "complete")  
+
+
+
+
+
+
+######################### ALPHA SELECTION ELASTIC NET ##########################
+Ps = c()
+alphas = seq(from = 0, to = 1, length.out = 1000)
+for (alpha in alphas) 
+{
+  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  best_lambda <- cv_fit$lambda.min
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
+  
+  # estraggo i coefficienti diversi da 0 (nonzero_vars)
+  coef_enet <- coef(elastic_net_model)
+  coef_values <- as.vector(coef_enet[-1])  
+  names(coef_values) <- rownames(coef_enet)[-1] 
+  nonzero_vars <- names(coef_values[coef_values != 0])
+  #nonzero_vars
+  #nonzero_vars = c("num_of_pendown5","paper_time25","air_time24")
+  #nonzero_vars = c()
+
+  correlation_df_enet_boundary <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars, correlation_df$Var2 %in% nonzero_vars), ]
+  # correlazione media mancante
+  P1 <- ifelse(nrow(correlation_df_enet_boundary) == 0, 0, sum(correlation_df_enet_boundary$abs_value) / nrow(correlation_df_enet_boundary))
+  correlation_df_enet_interior <- correlation_df[(correlation_df$Var1 %in% nonzero_vars) & (correlation_df$Var2 %in% nonzero_vars), ]
+  # correlazione media presente
+  P2 <- ifelse(nrow(correlation_df_enet_interior) == 0, 1, sum(correlation_df_enet_interior$abs_value) / nrow(correlation_df_enet_interior))
+  P = (1-P1)*P2
+  Ps=c(Ps,P)
+  
+  cat("alpha: ",alpha," P: ",P,"\n")
+}
+
+loess_fit <- loess(Ps ~ alphas, span = 0.3)  
+Ps_smooth <- predict(loess_fit, newdata = alphas)
+max_index <- which.max(Ps_smooth)
+alpha_max <- alphas[max_index]
+alpha_max
+P_max <- Ps_smooth[max_index]
+plot(alphas, Ps, pch = 16, col = "gray")
+lines(alphas, Ps_smooth, lwd = 2)
+
+########################## ELASTIC NET STABILITY SELECTION #####################
+alpha = 0.12
+elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+lambdas <- elastic_net_model$lambda
+
+num_features <- ncol(X_train)
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
+num_subsamples <- 100
+subsample_size <- floor(nrow(X_train) / 2)
+
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    
+    subsample_model <- glmnet(X_subsample, y_subsample, alpha = alpha, family = "binomial", lambda = lambda)
+    
+    coefficients <- coef(subsample_model, s = lambda)[-1]  # Exclude intercept
+    # selected_features <- which(abs(coefficients) > 1e-6)?
+    selected_features <- which(coefficients != 0)
+    selection_frequencies[lambda_idx,selected_features] <- selection_frequencies[lambda_idx,selected_features] + 1
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+
+stable_indices <- which(max_selection_probabilities >= 0.8)
+feature_names <- colnames(X_train)
+stable_feature_names <- feature_names[stable_indices]
+stable_feature_names
+
+
+################### GROUP LASSO PER TASK STABILITY SELECTION #############################
+groups <- rep(1:25, each = 18) 
+y_train <- ifelse(y_train == 1, 1, 0)
+data <- list(x = X_train, y = y_train)
+#lambdas <- seq(from = 0.0129, to = 0.01, length.out = 20)#sgl alpha = 0
+#nlam = length(lambdas)
+#lambdas
+SGL_model <- SGL(data,groups, type="logit",standardize = TRUE, verbose = TRUE, alpha = 0)
+lambdas <- SGL_model$lambdas
+#lambdas = lambdas[0:3]
+lambdas
+# non si usa
+beta_matrix <- SGL_model$beta 
+
+num_groups <- 25
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_groups )
+num_subsamples <- 100
+subsample_size <- floor(nrow(X_train) / 2)
+
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    # subsample_data?
+    data <- list(x = X_subsample, y = y_subsample)
+    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
+    beta <- subsample_model$beta
+    
+    # per ogni gruppo controllo se almeno un coefficiente è non nullo
+    for (gr in 1:25) 
+    {
+      # tutti i coefficienti del gruppo g (lunghezza 18)
+      beta_gr <- beta[groups == gr]
+      if (any(beta_gr != 0)) 
+      {
+        selection_frequencies[lambda_idx,gr] <- selection_frequencies[lambda_idx,gr] + 1
+      }
+    }
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+max_selection_probabilities
+stable_groups <- which(max_selection_probabilities >= 0.8)
+stable_groups
+
+
+################## GROUP LASSO PER FEATURE STABILITY SELECTION ###########################
+
+#dati i coefficienti di un modello con un certo lambda, controlla che i coefficienti dei gruppi che siano o tutti zero o tutti non zero
+check <- function(beta_lam) {
+  for (gr in 1:18) 
+  {
+    beta_gr <- beta_lam[groups == gr]
+    if (any(beta_gr == 0.0) ) 
+    {
+      if(any(beta_gr!=0.0))
+      {
+        print("err")
+      }
+    }
+    
+    if (any(beta_gr != 0.0) ) 
+    {
+      if(any(beta_gr==0.0))
+      {
+        print("err")
+      }
+      
+    }
+    
+  }
+}
+
+groups <- rep(1:18, times = 25)
+y_train <- ifelse(y_train == 1, 1, 0)
+data <- list(x = X_train, y = y_train)
+SGL_model <- SGL(data,groups, type="logit", nlam = 5, standardize = TRUE, verbose = TRUE, alpha = 0)
+lambdas <- SGL_model$lambdas
+lambdas
+# questa non si usa
+beta_matrix <- SGL_model$beta 
+
+num_features <- 18
+selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
+num_subsamples <- 50
+subsample_size <- floor(nrow(X_train) / 2)
+
+for (lambda_idx in seq_along(lambdas)) 
+{
+  lambda <- lambdas[lambda_idx]
+  print(lambda_idx)
+  for (i in 1:num_subsamples)
+  {
+    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+    X_subsample <- X_train[subsample_indices, ]
+    y_subsample <- y_train[subsample_indices]
+    # subsample_data?
+    data <- list(x = X_subsample, y = y_subsample)
+    subsample_model <- SGL(data,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
+    beta <- subsample_model$beta
+    check(beta)
+    # considero solo i primi 18 valori perchè ognuno è rappresentante di ogni gruppo
+    beta1 = beta[0:18]
+    #print(beta1)
+    # i coefficienti diversi da 0 sono selezionati
+    beta1[beta1 != 0] <- 1
+    #print(beta1)
+    selection_frequencies[lambda_idx,] <- selection_frequencies[lambda_idx,] + beta1
+  }
+}
+selection_probabilities <- selection_frequencies / num_subsamples
+max_selection_probabilities <- apply(selection_probabilities, 2, max)
+max_selection_probabilities
+stable_features <- which(max_selection_probabilities >= 0.8)
+stable_features
 ################ GROUP LASSO ON COMPONENTS STABILITY SELECTION #################
 
 check <- function(beta_lam, num_groups) {
@@ -711,7 +715,7 @@ check <- function(beta_lam, num_groups) {
 
 # estrai componenti
 corr_matrix <- cor(X_train)
-adj_matrix <- abs(corr_matrix) > 0.8
+adj_matrix <- abs(corr_matrix) > 0.7
 g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected", diag = FALSE)
 components <- components(g)
 feature_names <- colnames(X_train)
@@ -781,3 +785,22 @@ for (stable_group in stable_groups) {
   features_in_group <- feature_names[groups == stable_group]
   cat(features_in_group, "\n\n")
 }
+
+
+
+# Compute covariance matrix of training data
+S <- cov(X_train)
+
+# Run Graphical Lasso with a chosen regularization parameter (lambda)
+lambda <- 0.1  # Adjust as needed
+glasso_result <- glasso(S, rho = lambda, trace=TRUE,approx=FALSE,maxit = 1000, thr = 0.1)
+
+# Extract adjacency matrix (precision matrix)
+precision_matrix <- glasso_result$wi  # Inverse covariance (precision) matrix
+
+install.packages("qgraph")
+library(qgraph)
+
+# Convert precision matrix into a graph
+qgraph(precision_matrix, layout = "spring", labels = colnames(X_train), 
+       graph = "glasso", threshold = TRUE)
