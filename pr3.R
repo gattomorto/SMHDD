@@ -8,6 +8,7 @@ library(reshape2)
 library(leaps)
 library(igraph)
 library(glasso)
+library(qgraph)
 
 rm(list=ls())
 
@@ -489,6 +490,7 @@ pheatmap((cor_matrix), clustering_method = "complete")
 
 
 
+
 ######################### ALPHA SELECTION ELASTIC NET ##########################
 Ps = c()
 alphas = seq(from = 0, to = 1, length.out = 1000)
@@ -786,21 +788,31 @@ for (stable_group in stable_groups) {
   cat(features_in_group, "\n\n")
 }
 
+############################### GRAPHICAL LASSO ################################
+
+# Converting covariance to correlation and standardizing are the same thing, it's easy to show
+X_scaled <- scale(X_train)
+
+S <- cov(X_scaled)
+lambda <- 0.1
+glasso_result <- glasso(S, rho = lambda, trace = TRUE)
+
+precision_matrix <- glasso_result$wi
+
+adjacency_matrix <- ifelse(abs(precision_matrix) > 1e-6, 1, 0)
+diag(adjacency_matrix) <- 0
+
+graph <- graph_from_adjacency_matrix(adjacency_matrix, mode = "undirected", weighted = NULL)
+
+plot(graph,
+     vertex.label = colnames(X_scaled), # Use feature names as labels
+     vertex.size = 10,                  # Size of the nodes
+     vertex.color = "lightblue",        # Color of the nodes
+     edge.color = "gray",               # Color of the edges
+     main = "Graphical Lasso Network")  # Title of the plot
 
 
-# Compute covariance matrix of training data
-S <- cov(X_train)
 
-# Run Graphical Lasso with a chosen regularization parameter (lambda)
-lambda <- 0.1  # Adjust as needed
-glasso_result <- glasso(S, rho = lambda, trace=TRUE,approx=FALSE,maxit = 1000, thr = 0.1)
 
-# Extract adjacency matrix (precision matrix)
-precision_matrix <- glasso_result$wi  # Inverse covariance (precision) matrix
 
-install.packages("qgraph")
-library(qgraph)
 
-# Convert precision matrix into a graph
-qgraph(precision_matrix, layout = "spring", labels = colnames(X_train), 
-       graph = "glasso", threshold = TRUE)
