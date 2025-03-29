@@ -1,0 +1,286 @@
+# the column with the header "total_time8" collects the values for the "total time" feature extracted from task #8
+# fare adaboost per mostrare il concetto di boosting?
+# puoi fare group lasso per task?
+# siamo interessati a trovare qual è il task migliore -- not all handwriting tasks are equally important for disease detection, and a targeted selection can lead to more efficient and effective diagnostic tools.
+# leggere libri su feature selection?
+# capire  quali task sono piu utili.
+# capire quali feature sono migliori.
+# sparse group lasso individua i task piu importanti e di ogni task, qual è la featura migliore
+# From Richard Hastie's glmnet package vignette: "It is known that the ridge penalty shrinks the coefficients of correlated predictors towards each other while the lasso tends to pick one of them and discard the others."
+# First, if two explanatory variables are highly correlated and effect sizes are unconstrained, then the explanatory variables show very similar influence on the response variable. In such a situation, the Lasso will only select one variable at random (Xu et al., 2012). This is problematic when the results are used for hypothesis generation because we would like to simultaneously select all variables which have the same evidence of activity. Here, we refer to this property as instability.
+#sembra di aver letto che per elastic net e forse altri, X devono essere sulla stessa scala
+
+
+QUESTO è NEL CONTESTO DI COME SCEGLIERE ALPHA E LAMBDA IN ELASTIC NET
+Instead of minimizing deviance, choose lambda based on parsimony (simpler models). For example:
+Use a one-standard-error rule : Select the largest lambda such that the deviance is within one standard error of the minimum deviance. This favors simpler models with fewer variables.
+Alternatively, manually inspect the regularization path and choose a lambda that retains only the most interpretable variables
+
+
+You mentioned that your goal is understanding , not prediction. This means you're primarily interested in identifying which variables are most important for explaining the outcome, rather than optimizing the model's predictive performance.
+
+ricorda di provare con best subset selecton
+
+sarebbe interessante vedere un immagine della matrice X come per i geni
+
+forse loha spiegato a voce come ha fatto elastic net.. ascolta la lezione e se non ce chiedigli
+
+si puo scegliere alpha per massimizzare recall e precision anche 
+
+The cross-validated likelihood landscape has a very flat maximum ridge on the (α, λ) landscape. Hence, all these values would suffice. There’s a reason why the popular glmnet package2 does not provide a function to cross-validate α and λ jointly!
+
+
+Biomarker Uncertainty Principle:
+A molecular signature can be either parsimonious or predictive, but not both.
+— FE Harrell, 2009
+
+
+α is often chosen based on intent and domain knowledge. Do you want a sparse model with many zero coefficients? Then chose α
+ close to a pure lasso regression. Do you want a dense model with many non-zero but small coefficients? Then chose α
+ close to a pure ridge model.
+ 
+ 
+Each data point on the curve is one value of λ
+, the plots tend to look better by log(λ)
+ though, so that has become a standard (glmnet)
+ 
+ 
+ Some authors propose overcoming the bias by using the LASSO for variable selection and then estimating the parameters of the selected subset using least squares
+ 
+ to quote Hastie and Zou, "If there is a group of variables among which the pairwise correlations are very high, then the lasso tends to select only one variable from the group and does not care which one is selected." This is a problem, for instance, because it means that we're not likely to find an element of the true support using the lasso--just one highly correlated with it
+ 
+ 
+ 
+ 
+ #The biggest challenge of elastic net regression over ridge and lasso regression is simply that we have an additional hyperparameter to tune, α. We can address this complication by simply running our cv.glmnet function with a wide range of alphas. We can do this by running a for loop.
+
+
+Techniques like Principal Component Analysis (PCA) or clustering methods can leverage these groups (of highly correlated vars) to create new, uncorrelated features
+
+
+Subject-matter expertise is critical to interpret clusters meaningfully (e.g., variables in a cluster might represent a latent construct like "economic activity").
+
+
+If you want to group variables based on how strongly they are related (regardless of whether the relationship is positive or negative), abs(cor_matrix)
+
+scaling prima di fare clustering?
+
+controlla se tutti i metodi vogliono o non vogliono scaling
+
+La soglia 0.8 è arbitraria, ma se scelta con criterio (ad esempio, in base a validazione incrociata o considerazioni sul dominio), il metodo è sensato.
+
+lambda param della funzione glmnet:
+A user supplied lambda sequence. Typical usage is to have the program compute its own lambda sequence based on nlambda and lambda.min.ratio. Supplying a value of lambda overrides this. WARNING: use with care. Avoid supplying a single value for lambda (for predictions after CV use predict() instead). Supply instead a decreasing sequence of lambda values. glmnet relies on its warms starts for speed, and its often faster to fit a whole path than compute a single fit.
+
+(llm)
+The lambdas vector comes directly from the initial glmnet fit on the full dataset. While this is common practice, note that these lambda values may not be optimal for the smaller subsamples. Subsamples can have different scaling or variance properties, which might affect the regularization path
+
+chatgpt consiglia
+selected_features <- which(abs(coefficients) > 1e-6)
+
+
+sgl alpha = 0.95
+lambda:  0.0185 : NULL
+lambda:  0.01826316 : NULL
+lambda:  0.01802632 : NULL
+lambda:  0.01778947 : [1] 23
+lambda:  0.01755263 : [1]  7 23
+lambda:  0.01731579 : [1]  7 23
+lambda:  0.01707895 : [1]  7 23
+lambda:  0.01684211 : [1]  7 23
+lambda:  0.01660526 : [1]  7  9 23
+lambda:  0.01636842 : [1]  7  9 23
+lambda:  0.01613158 : [1]  7  9 23
+lambda:  0.01589474 : [1]  7  9 23
+lambda:  0.01565789 : [1]  7  9 16 23
+lambda:  0.01542105 : [1]  7  9 16 23
+lambda:  0.01518421 : [1]  7  9 16 23
+lambda:  0.01494737 : [1]  7  9 16 23
+lambda:  0.01471053 : [1]  7  9 16 23
+lambda:  0.01447368 : [1]  7  9 16 23
+lambda:  0.01423684 : [1]  7  9 16 23
+lambda:  0.014 : [1]  7  9 16 23
+
+
+
+gglasso:
+lambda:  0.15 : [1] 7
+lambda:  0.1473684 : [1] 7
+lambda:  0.1447368 : [1] 7
+lambda:  0.1421053 : [1]  7 17
+lambda:  0.1394737 : [1]  7 17
+lambda:  0.1368421 : [1]  7 17
+lambda:  0.1342105 : [1]  7 17 23
+lambda:  0.1315789 : [1]  7  9 17 23
+lambda:  0.1289474 : [1]  7  9 17 23 25
+lambda:  0.1263158 : [1]  7  9 17 23 25
+lambda:  0.1236842 : [1]  7  9 17 23 25
+lambda:  0.1210526 : [1]  7  9 17 23 25
+lambda:  0.1184211 : [1]  7  9 17 23 25
+lambda:  0.1157895 : [1]  7  9 17 23 25
+lambda:  0.1131579 : [1]  7  9 17 23 25
+lambda:  0.1105263 : [1]  7  9 17 23 25
+lambda:  0.1078947 : [1]  7  9 17 23 25
+lambda:  0.1052632 : [1]  7  9 17 23 25
+lambda:  0.1026316 : [1]  7  9 17 23 25
+lambda:  0.1 : [1]  7  9 17 23 25
+
+sgl alpha = 0
+lambda:  0.0129 : [1] 7
+lambda:  0.01274737 : [1] 7
+lambda:  0.01259474 : [1] 7
+lambda:  0.01244211 : [1] 7
+lambda:  0.01228947 : [1]  7 17
+lambda:  0.01213684 : [1]  7 17
+lambda:  0.01198421 : [1]  7 17
+lambda:  0.01183158 : [1]  7 17
+lambda:  0.01167895 : [1]  7 17
+lambda:  0.01152632 : [1]  7 17
+lambda:  0.01137368 : [1]  7 17 23
+lambda:  0.01122105 : [1]  7  9 17 23
+lambda:  0.01106842 : [1]  7  9 17 23
+lambda:  0.01091579 : [1]  7  9 17 23 25
+lambda:  0.01076316 : [1]  7  9 17 23 25
+lambda:  0.01061053 : [1]  7  9 17 23 25
+lambda:  0.01045789 : [1]  7  9 17 23 25
+lambda:  0.01030526 : [1]  7  9 17 23 25
+lambda:  0.01015263 : [1]  7  9 17 23 25
+lambda:  0.01 : [1]  7  9 17 23 25
+
+
+It is important to recognize the difficulty of the selection and estimation tasks by bootstrapping the whole process to put confidence intervals on such variable importance estimates. It amazes me how so many applied fields will insist on p-values or confidence intervals, only to forget about uncertainty when machine learning calculates feature importance. If you wouldn't accept a mean without some kind of test or interval estimate, why is feature importance exempt from this?--
+nel senso che i coefficienti dipendono dal sample
+
+i difetti sono che il modello è lineare e non considero le interazioni
+
+Meinshausen & Bühlmann (2010) – "Stability Selection"
+Shows that variable selection by Lasso is unstable and highly dependent on the sample.
+Proposes stability selection, a bootstrap-based method to assess true importance.
+
+The variable that enters the model first (i.e., becomes non-zero) as lambda decreases is typically the one with the strongest correlation with the response variable
+
+# stable group lasso per **task**
+> stable_groups <- which(max_selection_probabilities >= 0.8)
+> stable_groups
+ [1]  2  7  9 15 17 19 21 23 24 25
+> stable_groups <- which(max_selection_probabilities >= 0.9)
+> stable_groups
+[1]  7  9 15 17 19 23
+> stable_groups <- which(max_selection_probabilities >= 0.95)
+> stable_groups
+[1]  7  9 19 23
+
+# group lasso stable **features**
+[1]  1  2  5 11 16
+(air_time, disp_dindex, max_x_extension, mean_jerk_on_paper, pressure mean)
+
+
+# stable group lasso on **components** (nlam = 5)
+> stable_groups <- which(max_selection_probabilities >= 0.9)
+> stable_groups
+ [1]  16  54  84  92 151 189 196 199 213 257
+> stable_groups <- which(max_selection_probabilities >= 0.95)
+> stable_groups
+[1] 151 196 199 213
+
+Stable Group 151 :
+air_time15 total_time15 
+Stable Group 196 :
+num_of_pendown19 
+Stable Group 199 :
+pressure_var19 
+Stable Group 213 :
+disp_index21 
+
+
+
+
+
+
+Conditional independence helps distinguish between direct and indirect relationships. Two variables might appear correlated (dependent) because they're both influenced by a third variable, not because they directly affect each other.
+For example: Blood pressure and heart rate might appear related in your data, but perhaps they're both actually responding to exercise level. The graphical model would show connections from exercise to both variables, but no direct connection between blood pressure and heart rate.
+se fai correlation graph tutte le tre variabili sono collegate (clique)
+se fai graph lasso avrai un collegamento da physical activity a blood pressure
+e un collegamento anche a heart rate
+This distinction is clinically meaningful. A doctor seeing only the correlation might assume that treating high blood pressure would directly affect heart rate. The conditional independence graph reveals that both are responding to a common cause (physical activity), and interventions might be more effective if targeted at the activity level rather than assuming a direct relationship between BP and HR.
+
+Standard correlations can be misleading because they capture both direct and indirect effects. The graph from GLasso focuses on the "true" structure by showing only direct effects.
+
+No connections between {A,B,E} and {C,D}: The tech/consumer sector and the oil/airline sector operate independently.
+
+Control vs. AD Differences: By running separate models for the control group and AD patients, you could identify which connections strengthen or weaken with disease progression.
+
+Have you made a network using **correlations before**? Have you ever noticed that these networks are kind of clumpy?
+What do I mean by clumpy? Consider three species of bacteria: A, B, and C. Suppose A secretes some molecule essential for the growth of B. Suppose also that C is a predator of A (maybe a bdellovibrio). What is the relationship between B and C? These microbes have no direct interaction in this scenario. Nevertheless, their abundances will be correlated. 
+What does this mean for your network? It’s going to be chock full o’ triangles.
+Is this a problem? You tell me - are you interested in identifying “true” direct interactions? Do you want indirect interactions to be shown by edges in your network? In general, if you are interested in analyzing network structure these indirect interactions may be a problem
+So correlation might not work for us huh? It’s not correlation’s fault though. We weren’t asking the right question.
+We asked: Are species A and B correlated?
+What we should ask: Are species A and B correlated, given all the other species in the community?
+What we are really interested in is the partial correlation - the correlation between A and B controlling for C.
+For various technical reasons we don’t want to actually directly compute partial correlations between each pair of variables (see slide 60-onward in this lecture if you are curious). Instead we use a method called the “graphical lasso”.
+
+colorare i nodi che appartengono allo stesso task?
+
+
+if theta_ij != 0 suggests a direct relationship between Xi and Xj even after accounting for the influence of other variables (llm)
+Ma non è come in linear regression dove beta_j rappresenta quanto y aumenta per ogni unità di X_j tenendo gli altri fissi??!!
+
+Variables connected to a target variable in the graph may be important predictors in a regression model.(llm)
+
+
+
+Suppose you computed a graph for a health dataset with variables like blood pressure, cholesterol, age, and BMI:
+If there’s an edge between blood pressure and cholesterol, it suggests these two variables are conditionally dependent, even after accounting for age and BMI.
+If BMI is a hub, it might indicate that BMI strongly influences other health metrics.(llm)
+
+Conditional Dependence : An edge between variables X and Y indicates they are conditionally dependent given all other variables. This means their relationship is not fully explained by other variables in the model.(llm)
+
+e se faccio glasso solo sulle variabili selezionate da lasso?
+
+2. **Feature selection or dimensionality reduction**: Graphical Lasso could potentially help in identifying a subset of features that are most relevant for distinguishing between Alzheimer's patients and healthy controls by examining the sparsity pattern in the estimated precision matrix.
+
+The resulting graph could identify **hub features** (highly connected nodes) that are critical markers of AD. For example, tremor metrics (GMRT) or speed variability might emerge as central to distinguishing AD patients from controls.
+
+
+Central Hub: The variable may act as a key mediator or hub in the network, influencing or being influenced by many other variables. llm
+
+AD affects both cognitive (memory, planning) and motor (fine movement control) functions
+
+It strongly interacts with many other handwriting features, meaning it might be a fundamental descriptor of handwriting patterns.
+
+If Total Time (TT) is a high-degree node in both AD and healthy groups, it means TT is just generally important for handwriting.
+
+But if TT has more connections in the AD group, it suggests that handwriting slowing down is more influential in Alzheimer’s patients.
+
+If a feature like Mean Jerk (MJP) is highly connected only in AD patients, it might indicate a specific signature of cognitive decline.
+
+Even in a mixed dataset, a high-degree feature is statistically central to the network. This implies it is:
+A hub that integrates multiple handwriting dimensions (e.g., time, pressure, spatial dispersion).
+Potentially more sensitive to group differences because its connections aggregate subtle changes.
+
+The node with the highest degree is a hub in the conditional dependency graph. It has the strongest or most numerous conditional relationships with other variables, meaning it is statistically dependent on many other variables even after accounting for the effects of all others.
+
+ if two variables are correlated, this does not necessarily imply that they are directly dependent on each other
+ 
+ Now it is not a priori clear if this dependency is due to a direct relationship between the two variables or if it is mediated by a **set** of other random variables Z
+ 
+ In contrast to correlation, a vanishing partial correlation is not a strong indicator of independence, but high partial correlation is a strong indicator of dependence. (che vuoldire)
+ 
+ However, an observed association between two variables might be misleading, i.e. not refecting a
+genuine interaction between them
+
+More precisely, in a partial correlation network, the edges connected to a single node are analogous to the
+regression coefcients obtained in a multiple regression model, where the dependent variable is the node under
+consideration30 Moreover, representing partial correlations, the edges are considered indicative of causal relations between the connecting nodes
+
+Degree Centrality: Features with many connections may be broadly influential.
+
+Estimate separate precision matrices (and their corresponding graphs) for Alzheimer’s patients and healthy controls. Identify edges (conditional dependencies) that differ significantly between the two groups. This highlights disrupted interactions between handwriting features in AD, such as loss of coordination between specific tasks or motor control mechanisms. llm
+
+Centrality Measures : Calculate centrality measures such as degree, betweenness, closeness, and eigenvector centrality to identify key features that play a significant role in distinguishing Alzheimer's patients from healthy individuals. llm
+
+Interpret communities in the context of the DARWIN tasks (e.g., motor control features vs. cognitive load features). llm
+
+fare fit ols sulle feature trovate per vedere i segni dei beta!??
+ 

@@ -491,6 +491,7 @@ pheatmap((cor_matrix), clustering_method = "complete")
 
 
 
+
 ######################### ALPHA SELECTION ELASTIC NET ##########################
 Ps = c()
 alphas = seq(from = 0, to = 1, length.out = 1000)
@@ -790,29 +791,101 @@ for (stable_group in stable_groups) {
 
 ############################### GRAPHICAL LASSO ################################
 
-# Converting covariance to correlation and standardizing are the same thing, it's easy to show
-X_scaled <- scale(X_train)
+rm(list=ls())
 
-S <- cov(X_scaled)
-lambda <- 0.1
-glasso_result <- glasso(S, rho = lambda, trace = TRUE)
+data <- read_csv("DARWIN.csv", col_names = TRUE)
+data <- data[, -1]  # Remove the first column (Patient ID)
+y <- as.factor(data[[ncol(data)]])  
+X <- as.matrix(data[, -ncol(data)])
+y <- as.factor(ifelse(y == "P", 1, 0))  
+X_1 <- X[y == 1, ]  # Subset where y = 1
+X_0 <- X[y == 0, ]  # Subset where y = 0
 
-precision_matrix <- glasso_result$wi
+X_1_scaled <- scale(X_1)
+X_0_scaled <- scale(X_0)
+S_1 <- cov(X_1_scaled)
+S_0 <- cov(X_0_scaled)
+lambda = 0.1
+glasso_1 <- glasso(S_1, rho = lambda, trace = TRUE)
+glasso_0 <- glasso(S_0, rho = lambda, trace = TRUE)
+precision_1 <- glasso_1$wi
+precision_0 <- glasso_0$wi
+adj_1 <- ifelse(abs(precision_1) > 1e-6, 1, 0)
+diag(adj_1) <- 0
+adj_0 <- ifelse(abs(precision_0) > 1e-6, 1, 0)
+diag(adj_0) <- 0
+graph_1 <- graph_from_adjacency_matrix(adj_1, mode = "undirected")
+graph_0 <- graph_from_adjacency_matrix(adj_0, mode = "undirected")
 
-adjacency_matrix <- ifelse(abs(precision_matrix) > 1e-6, 1, 0)
-diag(adjacency_matrix) <- 0
-
-graph <- graph_from_adjacency_matrix(adjacency_matrix, mode = "undirected", weighted = NULL)
-
-plot(graph,
-     vertex.label = colnames(X_scaled), # Use feature names as labels
-     vertex.size = 10,                  # Size of the nodes
-     vertex.color = "lightblue",        # Color of the nodes
-     edge.color = "gray",               # Color of the edges
-     main = "Graphical Lasso Network")  # Title of the plot
+#degrees
+degrees_1 <- degree(graph_1)
+names(degrees_1) <- colnames(X)
+degrees_1_sorted <- sort(degrees_1)
+degrees_1_sorted
+degrees_0 <- degree(graph_0)
+names(degrees_0) <- colnames(X)
+degrees_0_sorted <- sort(degrees_0)
+degrees_0_sorted
 
 
+num_isolated_0 <- sum(degrees_0 == 0)
+print(paste("Number of isolated nodes:", num_isolated_0))
+num_isolated_1 <- sum(degrees_1 == 0)
+print(paste("Number of isolated nodes:", num_isolated_1))
+
+
+
+#graph difference
+diff_adj <- adj_1 - adj_0
+diff_edges <- which(diff_adj != 0, arr.ind = TRUE)
+node_names <- colnames(X)
+diff_edges_df <- data.frame(Node1 = node_names[diff_edges[, 1]], 
+                            Node2 = node_names[diff_edges[, 2]], 
+                            Change = diff_adj[diff_edges])
+print(diff_edges_df)
 
 
 
 
+
+community_1 <- cluster_louvain(graph_1)
+community_0 <- cluster_louvain(graph_0)
+print(membership(community_1))
+print(membership(community_0))
+par(mfrow = c(1, 2))  # Side-by-side plotting
+plot(graph_1, vertex.color = membership(community_1), 
+     main = "Community Detection (y=1)", vertex.label = NA)
+plot(graph_0, vertex.color = membership(community_0), 
+     main = "Community Detection (y=0)", vertex.label = NA)
+num_communities_1 <- length(unique(membership(community_1)))
+num_communities_0 <- length(unique(membership(community_0)))
+
+
+community_sizes_1 <- sizes(community_1)
+community_sizes_1
+community_sizes_0 <- sizes(community_0)
+community_sizes_0
+largest_community_1 <- which.max(community_sizes_1)
+largest_community_1
+largest_community_0 <- which.max(community_sizes_0)
+largest_community_0
+cat("Largest community for y=1:", largest_community_1, "with size:", community_sizes_1[largest_community_1], "\n")
+cat("Largest community for y=0:", largest_community_0, "with size:", community_sizes_0[largest_community_0], "\n")
+
+
+
+# connected_graph_1 <- delete.vertices(graph_1, which(degrees_1 == 0))
+# plot(connected_graph_1,
+#      #vertex.label = colnames(X_scaled)[node_degrees != 0],  # Keep only non-isolated labels
+#      vertex.size = 10,
+#      vertex.color = "lightblue",
+#      edge.color = "gray",
+#      main = "Graphical Lasso Network (No Isolated Nodes)")
+
+
+
+
+
+
+
+#####################
