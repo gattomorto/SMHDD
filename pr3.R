@@ -892,3 +892,85 @@ for (stable_group in stable_groups) {
 
 ###################### TASK GROUP BEST SUBSET SELECTION ########################
 
+gbss.fit <- function(X, y, s, metric = "dev") 
+{
+  ##num_groups (s) = 2
+  numbers <- 1:25
+  combinations <- t(combn(numbers, s))
+  accuracy <- c()
+  deviance <- c()
+  #models <- list()
+  
+  groups <- rep(1:25, each = 18) 
+  num_combinations <- nrow(combinations)
+  num_combinations
+  
+  best_model = NULL
+  best_dev = Inf
+  
+  for (i in 1:num_combinations) 
+  {
+    print(i)
+    xx <- combinations[i, ]
+    feature_selector <- groups %in% xx
+    X_selected <- X[, feature_selector, drop = FALSE]
+    model <- glm(y ~ ., data = data.frame(y, X_selected), family = binomial, control = glm.control(maxit = 100))
+    #models[[i]] <- model
+    deviance[i] <-  model$deviance
+    prob_predictions <- predict(model, newdata = data.frame(X_selected), type = "response")
+    y_pred <- ifelse(prob_predictions > 0.5, 1, 0)
+    accuracy[i] <-  mean(y_pred == y)
+    
+    if (model$deviance < best_dev)
+    {
+      best_dev = model$deviance
+      best_model = model
+    }
+    
+  }
+  
+  combinations <- cbind(combinations, accuracy)
+  combinations <- cbind(combinations, deviance)
+  
+  #best_combination <- combinations[which.min(combinations[,"deviance"]), 1:(ncol(combinations) - 2)]
+  #return(best_combination)
+  return(best_model)
+  
+}
+#zz = ff(X_train,y_train,2)
+#16 25
+#1  9 25
+
+cv.gbss <- function(X,y,S,nfolds=3) 
+{ 
+  cvm <- numeric(length(S))
+  names(cvm) <- S 
+  
+  for (i in seq_along(S))
+  {
+    s <- S[i]
+    folds <- sample(rep(1:nfolds, length.out = nrow(X))) 
+    misclassification_rates <- numeric(nfolds)
+    for (k in 1:nfolds) 
+    {
+      X_train <- X[folds != k, ]
+      X_test <- X[folds == k, ]
+      y_train <- y[folds != k]
+      y_test <- y[folds == k]
+      
+      model <- gbss.fit(X_train,y_train,s)
+      # attenzione che qui newdata ha numero di colonne diverso
+      prob_predictions <- predict(model, newdata = data.frame(X_test), type = "response")
+      y_pred <- ifelse(prob_predictions > 0.5, 1, 0)
+      misclassification_rates[k] <- mean(y_pred != y_test)
+    }
+    
+    cvm[i] <- mean(misclassification_rates)
+  }
+  
+  s.min <- S[which.min(cvm)]
+  return(list(cvm = cvm, s.min = s.min))
+  
+}
+
+xx = cv.gbss(X,y,c(4))
