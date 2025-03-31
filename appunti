@@ -283,4 +283,24 @@ Centrality Measures : Calculate centrality measures such as degree, betweenness,
 Interpret communities in the context of the DARWIN tasks (e.g., motor control features vs. cognitive load features). llm
 
 fare fit ols sulle feature trovate per vedere i segni dei beta!??
+
+glmnet.fit Fit a GLM with elastic net regularization for a single value of lambda---credo che tu usi glmnet()
+
+        1         2         3 
+0.2126437 0.3563218 0.2701149
+
+
+        1         2 
+0.3333333 0.3160920 grouop task
+        2 
+0.2586207 
+
+        1         2 
+0.1954023 0.2873563 grop feature
+        2 
+0.2298851
+
+
+
+
  
