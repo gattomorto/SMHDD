@@ -890,7 +890,7 @@ for (stable_group in stable_groups) {
   cat(features_in_group, "\n\n")
 }
 
-###################### TASK GROUP BEST SUBSET SELECTION ########################
+######################## GROUP BEST SUBSET SELECTION ##########################
 
 # (group num - 1)*18 + 1 = dove inizia il gruppo 
 
@@ -898,20 +898,24 @@ for (stable_group in stable_groups) {
 # groups: struttura dei gruppi
 
 # data una famiglia di modelli identificata da s, fits to the data
-gbss.fit <- function(X, y, groups, s ) 
+gbss.fit <- function(X, y, groups, s, nbest=5 ) 
 {
   # tutte le possibili combinazioni di gruppi da provare
   subsets <- t(combn( 1:max(groups) , s))#togliere t
   accuracy <- c()#rimuovere
   deviance <- c()#rimuovere
   
-  best_model = NULL
+  best_model = NULL#rimuovere
   best_dev = Inf#rimuovere
   best_subset = NULL#rimuovere
   
+  
+  top_models <- vector("list", nbest)
+  top_deviances <- rep(Inf, nbest)
+  
   for (i in 1:nrow(subsets)) 
   {
-    print(i)
+    #print(i)
     print(subsets[i,])
     # per selezionare il sotto insieme da X
     feature_selector <- groups %in% subsets[i,]
@@ -924,11 +928,20 @@ gbss.fit <- function(X, y, groups, s )
     y_pred <- ifelse(prob_predictions > 0.5, 1, 0)#rimuovere
     accuracy[i] <-  mean(y_pred == y)#rimuovere
     
+    #rimuovere
     if (model$deviance < best_dev)
     {
       best_dev = model$deviance#rimuovere
-      best_model = model
+      best_model = model#rimuovere
       best_subset = subsets[i,]#rimuovere
+    }
+    
+    
+    if (model$deviance < max(top_deviances)) 
+    {
+      pos <- which.max(top_deviances)
+      top_models[[pos]] <- model
+      top_deviances[pos] <- model$deviance
     }
     
   }
@@ -936,9 +949,17 @@ gbss.fit <- function(X, y, groups, s )
   subsets <- cbind(subsets, accuracy)#rimuovere
   subsets <- cbind(subsets, deviance)#rimuovere
   
+  # ordina dal piu piccolo al piu grande
+  ord <- order(top_deviances)
+  top_models <- top_models[ord]
+  top_deviances <- top_deviances[ord]
   
-  return (best_model)
+  result <- list(
+    model = top_models[[1]],
+    top_models = top_models,
+    top_deviances = top_deviances)
   
+  return(result)
   
 }
 # S: l'insieme di parametri di regolarizzazione da convalidazione incrociata
@@ -961,10 +982,10 @@ cv.gbss <- function(X,y,S,groups,nfolds=3)
       y_train <- y[folds != k]
       y_test <- y[folds == k]
       
-      model <- gbss.fit(X_train,y_train,groups,s)
+      gbss_result <- gbss.fit(X_train,y_train,groups,s)
       #selected_features <- names(model$coefficients)[-1] 
       #prob_predictions <- predict(model, newdata = data.frame(X_test[, selected_features]), type = "response")
-      prob_predictions <- predict(model, newdata = data.frame(X_test), type = "response")
+      prob_predictions <- predict(gbss_result$model, newdata = data.frame(X_test), type = "response")
       
       y_pred <- ifelse(prob_predictions > 0.5, 1, 0)
       misclassification_rates[k] <- mean(y_pred != y_test)
@@ -977,6 +998,8 @@ cv.gbss <- function(X,y,S,groups,nfolds=3)
   return(list(cvm = cvm, s.min = s.min))
   
 }
-groups_feature <- rep(1:18, times = 25)
-groups_task <- rep(1:25, each = 18) 
-xx = cv.gbss(X,y,c(1,2),groups_feature)
+
+feature_groups <- rep(1:18, times = 25)
+task_goups <- rep(1:25, each = 18) 
+xx = cv.gbss(X,y,c(2),task_goups)
+#model <- gbss.fit(X,y,feature_groups,xx$s.min)
