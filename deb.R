@@ -143,7 +143,7 @@ cv.gbss <- function(X,y,S,groups,nfolds=3)
 
 feature_groups <- rep(1:18, times = 25)
 task_goups <- rep(1:25, each = 18) 
-xx = cv.gbss(X,y,c(2),task_goups)
+xx = cv.gbss(X,y,c(1,2),task_goups)
 
 #model <- gbss.fit(X,y_train,feature_groups,xx$s.min)
 

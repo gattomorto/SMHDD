@@ -302,5 +302,19 @@ glmnet.fit Fit a GLM with elastic net regularization for a single value of lambd
 
 
 
+        1         2         3         4         5 
+0.3218391 0.2758621 0.3563218 0.3390805 0.3620690 task e nfold=6 (min=2)
+
+        1         2         3         4         5 
+0.1666667 0.2701149 0.2988506 0.3505747 0.4080460 feature e nfold = 6 (min=1)
+
+        1         2         3         4         5 
+0.3401961 0.3496732 0.3264706 0.3617647 0.3398693 task nfold=10 (min = 3)
+
+        1         2         3         4         5 
+0.1836601 0.2888889 0.3388889 0.2898693 0.3790850 nfold = 10 (min = 1)
+
+
+
 
  

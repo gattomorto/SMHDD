@@ -311,7 +311,6 @@ non_zero_loadings = get_nonzero_loadings(spca_result)
 print_feature_counts(non_zero_loadings)
 print_task_counts(non_zero_loadings)
 
-)=()
 
 
 ########################## GROUP LASSO ON COMPONENTS (to be removed) ###########################
@@ -916,7 +915,7 @@ gbss.fit <- function(X, y, groups, s, nbest=5 )
   for (i in 1:nrow(subsets)) 
   {
     #print(i)
-    print(subsets[i,])
+    #print(subsets[i,])
     # per selezionare il sotto insieme da X
     feature_selector <- groups %in% subsets[i,]
     X_selected <- X[, feature_selector, drop = FALSE]
@@ -962,6 +961,7 @@ gbss.fit <- function(X, y, groups, s, nbest=5 )
   return(result)
   
 }
+
 # S: l'insieme di parametri di regolarizzazione da convalidazione incrociata
 cv.gbss <- function(X,y,S,groups,nfolds=3) 
 { 
@@ -977,10 +977,12 @@ cv.gbss <- function(X,y,S,groups,nfolds=3)
     misclassification_rates <- numeric(nfolds)
     for (k in 1:nfolds) 
     {
+      cat("s:",s,", fold:",k,"\n")
       X_train <- X[folds != k, ]
       X_test <- X[folds == k, ]
       y_train <- y[folds != k]
       y_test <- y[folds == k]
+      # in teoria è data leakage fare scale all'inizio
       
       gbss_result <- gbss.fit(X_train,y_train,groups,s)
       #selected_features <- names(model$coefficients)[-1] 
@@ -1001,5 +1003,5 @@ cv.gbss <- function(X,y,S,groups,nfolds=3)
 
 feature_groups <- rep(1:18, times = 25)
 task_goups <- rep(1:25, each = 18) 
-xx = cv.gbss(X,y,c(2),task_goups)
+xx = cv.gbss(X,y,S=c(1,2,3,4,5), groups=feature_groups, nfolds = 10)
 #model <- gbss.fit(X,y,feature_groups,xx$s.min)
