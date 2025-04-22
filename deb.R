@@ -27,124 +27,109 @@ y <- as.factor(ifelse(y == "P", 1, 0))  # "P" → 1, "H" → 0
 
 X <- scale(X)
 
-train_index <- createDataPartition(y, p = 0.8, list = FALSE)
+train_index <- createDataPartition(y, p = 0.2, list = FALSE)
 X_train <- X[train_index, ]
 y_train <- y[train_index]
 X_test <- X[-train_index, ]
 y_test <- y[-train_index]
 
+X_train = X
+y_train = y
 
-# (group num - 1)*18 + 1 = dove inizia il gruppo 
 
-# s: parametro di regolarizzazione
-# groups: struttura dei gruppi
+##################
+correlation_matrix <- cor(X_train)
+# perchè la matrice ha la metà delle informazioni rindondanti
+correlation_df <- melt(correlation_matrix)
+correlation_df <- correlation_df[order(-abs(correlation_df$value)), ]
+correlation_df <- correlation_df[correlation_df$Var1 != correlation_df$Var2, ]
+correlation_df$pair <- apply(correlation_df[, c("Var1", "Var2")], 1, function(x) paste(sort(x), collapse = "_"))
+correlation_df <- correlation_df[!duplicated(correlation_df$pair), ]
+correlation_df$pair <- NULL
+correlation_df$abs_value = abs(correlation_df$value)
+correlation_df$abs_value2 <- ifelse(correlation_df$abs_value > 0.8,
+                                    correlation_df$abs_value,
+                                    0)
+###################
+#0 ridge 1 lasso
 
-# data una famiglia di modelli identificata da s, fits to the data
-gbss.fit <- function(X, y, groups, s, nbest=5 ) 
+
+phis = c()
+ss = c()
+rhos = c()
+alphas = seq(from = 0, to = 1, length.out = 25)
+#alphas= alphas[-1]
+#alpha = alphas[1]
+for (alpha in alphas) 
 {
-  # tutte le possibili combinazioni di gruppi da provare
-  subsets <- t(combn( 1:max(groups) , s))#togliere t
-  accuracy <- c()#rimuovere
-  deviance <- c()#rimuovere
+  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  best_lambda <- cv_fit$lambda.min
   
-  best_model = NULL#rimuovere
-  best_dev = Inf#rimuovere
-  best_subset = NULL#rimuovere
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
+  
+  # estraggo i coefficienti diversi da 0 (nonzero_vars)
+  coef_enet <- coef(elastic_net_model)
+  coef_values <- as.vector(coef_enet[-1])  
+  names(coef_values) <- rownames(coef_enet)[-1] 
+  S_alpha <- names(coef_values[coef_values != 0])
   
   
-  top_models <- vector("list", nbest)
-  top_deviances <- rep(Inf, nbest)
-  
-  for (i in 1:nrow(subsets)) 
-  {
-    #print(i)
-    print(subsets[i,])
-    # per selezionare il sotto insieme da X
-    feature_selector <- groups %in% subsets[i,]
-    X_selected <- X[, feature_selector, drop = FALSE]
-    model <- glm(y ~ ., data = data.frame(y, X_selected), family = binomial, singular.ok = TRUE ,control = glm.control(maxit = 1000))
+  # correlation_df <- data.frame(
+  #   Var1 =     c("X1",  "X1",  "X1",  "X2",  "X2",  "X3"),
+  #   Var2 =     c("X2",  "X3",  "X4",  "X3" , "X4",  "X4"),
+  #   abs_value =c( 0,     0,      0,    1,      1,     0 )
+  # )
+  # S_alpha = c("X1","X3","X4")
 
-    deviance[i] <-  model$deviance#rimuovere
+  pi_x <- numeric(length(S_alpha))
+  names(pi_x) <- S_alpha
+  
+
+  # For each selected variable, calculate the sum of absolute correlations
+  for (x in S_alpha) 
+  {
+
     
-    prob_predictions <- predict(model, newdata = data.frame(X_selected), type = "response")
-    y_pred <- ifelse(prob_predictions > 0.5, 1, 0)#rimuovere
-    accuracy[i] <-  mean(y_pred == y)#rimuovere
+    #x = "X1"
     
-    #rimuovere
-    if (model$deviance < best_dev)
-    {
-      best_dev = model$deviance#rimuovere
-      best_model = model#rimuovere
-      best_subset = subsets[i,]#rimuovere
-    }
+
+    related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
+    related_correlations_not_selected <- related_correlations[
+      xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
+    ]
+    sum_related_correlations = sum(related_correlations$abs_value2)
+    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value2)
     
-    
-    if (model$deviance < max(top_deviances)) 
-    {
-        pos <- which.max(top_deviances)
-        top_models[[pos]] <- model
-        top_deviances[pos] <- model$deviance
-    }
+    pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
     
   }
   
-  subsets <- cbind(subsets, accuracy)#rimuovere
-  subsets <- cbind(subsets, deviance)#rimuovere
+  pi_alpha = sum(pi_x)/length(S_alpha)
+  sigma_alpha = 1-length(S_alpha)/450
+  phi_alpha = pi_alpha*sigma_alpha
   
-  # ordina dal piu piccolo al piu grande
-  ord <- order(top_deviances)
-  top_models <- top_models[ord]
-  top_deviances <- top_deviances[ord]
   
-  result <- list(
-    model = top_models[[1]],
-    top_models = top_models,
-    top_deviances = top_deviances)
-  
-  return(result)
-  
-}
-# S: l'insieme di parametri di regolarizzazione da convalidazione incrociata
-cv.gbss <- function(X,y,S,groups,nfolds=3) 
-{ 
-  # la media dell'errori per ogni parametro
-  cvm <- numeric(length(S))
-  names(cvm) <- S 
-  
-  for (i in seq_along(S))
-  {
-    s <- S[i]
-    folds <- sample(rep(1:nfolds, length.out = nrow(X))) 
-    # errori medi per ogni fold fissato s
-    misclassification_rates <- numeric(nfolds)
-    for (k in 1:nfolds) 
-    {
-      X_train <- X[folds != k, ]
-      X_test <- X[folds == k, ]
-      y_train <- y[folds != k]
-      y_test <- y[folds == k]
-      
-      gbss_result <- gbss.fit(X_train,y_train,groups,s)
-      #selected_features <- names(model$coefficients)[-1] 
-      #prob_predictions <- predict(model, newdata = data.frame(X_test[, selected_features]), type = "response")
-      prob_predictions <- predict(gbss_result$model, newdata = data.frame(X_test), type = "response")
-      
-      y_pred <- ifelse(prob_predictions > 0.5, 1, 0)
-      misclassification_rates[k] <- mean(y_pred != y_test)
-    }
-    
-    cvm[i] <- mean(misclassification_rates)
-  }
-  
-  s.min <- S[which.min(cvm)]
-  return(list(cvm = cvm, s.min = s.min))
+  phis = c(phis,phi_alpha)
+  rhos = c(rhos,pi_alpha)
+  ss = c(ss,sigma_alpha)
+  cat("alpha:, ",alpha, "phi: ",phi_alpha,"\n")
   
 }
 
-feature_groups <- rep(1:18, times = 25)
-task_goups <- rep(1:25, each = 18) 
-xx = cv.gbss(X,y,c(1,2),task_goups)
 
-#model <- gbss.fit(X,y_train,feature_groups,xx$s.min)
+loess_fit <- loess(phis ~ alphas, span = 0.3)  
+Ps_smooth <- predict(loess_fit, newdata = alphas)
+max_index <- which.max(Ps_smooth)
+alpha_max <- alphas[max_index]
+alpha_max
+plot(alphas, phis, pch = 16, col = "gray")
+lines(alphas, Ps_smooth, lwd = 2)
 
+plot(alphas,ss)
+plot(alphas,rhos)
+plot(alphas, ss, type = "l", col = "blue", lwd = 2, 
+     ylim = range(c(ss, rhos)),  
+     xlab = "Alpha", ylab = "Value")
+lines(alphas, rhos, col = "red", lwd = 2)
+lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
 

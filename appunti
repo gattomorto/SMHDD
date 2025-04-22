@@ -1,27 +1,12 @@
-# the column with the header "total_time8" collects the values for the "total time" feature extracted from task #8
-# fare adaboost per mostrare il concetto di boosting?
-# puoi fare group lasso per task?
 # siamo interessati a trovare qual è il task migliore -- not all handwriting tasks are equally important for disease detection, and a targeted selection can lead to more efficient and effective diagnostic tools.
 # leggere libri su feature selection?
-# capire  quali task sono piu utili.
-# capire quali feature sono migliori.
 # sparse group lasso individua i task piu importanti e di ogni task, qual è la featura migliore
 # From Richard Hastie's glmnet package vignette: "It is known that the ridge penalty shrinks the coefficients of correlated predictors towards each other while the lasso tends to pick one of them and discard the others."
 # First, if two explanatory variables are highly correlated and effect sizes are unconstrained, then the explanatory variables show very similar influence on the response variable. In such a situation, the Lasso will only select one variable at random (Xu et al., 2012). This is problematic when the results are used for hypothesis generation because we would like to simultaneously select all variables which have the same evidence of activity. Here, we refer to this property as instability.
 #sembra di aver letto che per elastic net e forse altri, X devono essere sulla stessa scala
 
 
-QUESTO è NEL CONTESTO DI COME SCEGLIERE ALPHA E LAMBDA IN ELASTIC NET
-Instead of minimizing deviance, choose lambda based on parsimony (simpler models). For example:
-Use a one-standard-error rule : Select the largest lambda such that the deviance is within one standard error of the minimum deviance. This favors simpler models with fewer variables.
-Alternatively, manually inspect the regularization path and choose a lambda that retains only the most interpretable variables
-
-
 You mentioned that your goal is understanding , not prediction. This means you're primarily interested in identifying which variables are most important for explaining the outcome, rather than optimizing the model's predictive performance.
-
-ricorda di provare con best subset selecton
-
-sarebbe interessante vedere un immagine della matrice X come per i geni
 
 forse loha spiegato a voce come ha fatto elastic net.. ascolta la lezione e se non ce chiedigli
 
@@ -34,6 +19,8 @@ Biomarker Uncertainty Principle:
 A molecular signature can be either parsimonious or predictive, but not both.
 — FE Harrell, 2009
 
+
+#################################QUI########################̂
 
 α is often chosen based on intent and domain knowledge. Do you want a sparse model with many zero coefficients? Then chose α
  close to a pure lasso regression. Do you want a dense model with many non-zero but small coefficients? Then chose α

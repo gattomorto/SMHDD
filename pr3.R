@@ -30,7 +30,7 @@ y_test <- y[-train_index]
 ############################ PAIRWISE CORRELATION ##############################
 
 correlation_matrix <- cor(X_train)
-# questo blocco rimuove tutte le rindondanze
+# perchè la matrice ha la metà delle informazioni rindondanti
 correlation_df <- melt(correlation_matrix)
 correlation_df <- correlation_df[order(-abs(correlation_df$value)), ]
 correlation_df <- correlation_df[correlation_df$Var1 != correlation_df$Var2, ]
@@ -38,18 +38,21 @@ correlation_df$pair <- apply(correlation_df[, c("Var1", "Var2")], 1, function(x)
 correlation_df <- correlation_df[!duplicated(correlation_df$pair), ]
 correlation_df$pair <- NULL
 correlation_df$abs_value = abs(correlation_df$value)
-correlation_df$abs_value <- ifelse(correlation_df$abs_value > 0.8, 
-                                            correlation_df$abs_value, 
+correlation_df$abs_value2 <- ifelse(correlation_df$abs_value > 0.8,
+                                            correlation_df$abs_value,
                                             0)
 
-X_train <- as.data.frame(X_train)
-plot(X_train$max_x_extension1 , X_train$max_y_extension1 )
-cor(X_train$max_x_extension1, X_train$max_y_extension1)
+
+n_high_corr_pairs <- nrow(correlation_df[abs(correlation_df$value) > 0.8, ])
+print(n_high_corr_pairs)
+
+#X_train <- as.data.frame(X_train)
+#plot(X_train$max_x_extension1 , X_train$max_y_extension1 )
+#cor(X_train$max_x_extension1, X_train$max_y_extension1)
 
 
-
-# Find highly correlated variables (threshold = 0.8)
-#high_corr_vars <- findCorrelation(correlation_matrix, cutoff = 0.8, names = TRUE)
+# Nota che qst non mostra tutte, solo le variabili da eliminare
+#high_corr_vars <- findCorrelation(correlation_matrix, cutoff = 0.9997608, names = TRUE)
 #print(high_corr_vars)
 
 ################################ LASSO STD (to be removed) #####################################
@@ -410,6 +413,47 @@ data_train <- data.frame(X_train, y_train = as.numeric(y_train) - 1)  # Convert 
 subset_model <- regsubsets(y_train ~ ., data = data_train, nvmax = 10,really.big=T)
 
 
+############# ALPHA SELECTION ELASTIC NET OLD (to be removed) ##################
+Ps = c()
+alphas = seq(from = 0, to = 1, length.out = 1000)
+for (alpha in alphas) 
+{
+  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  best_lambda <- cv_fit$lambda.min
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
+  
+  # estraggo i coefficienti diversi da 0 (nonzero_vars)
+  coef_enet <- coef(elastic_net_model)
+  coef_values <- as.vector(coef_enet[-1])  
+  names(coef_values) <- rownames(coef_enet)[-1] 
+  nonzero_vars <- names(coef_values[coef_values != 0])
+  #nonzero_vars
+  #nonzero_vars = c("num_of_pendown5","paper_time25","air_time24")
+  #nonzero_vars = c()
+  
+  correlation_df_enet_boundary <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars, correlation_df$Var2 %in% nonzero_vars), ]
+  # correlazione media mancante
+  P1 <- ifelse(nrow(correlation_df_enet_boundary) == 0, 0, sum(correlation_df_enet_boundary$abs_value) / nrow(correlation_df_enet_boundary))
+  correlation_df_enet_interior <- correlation_df[(correlation_df$Var1 %in% nonzero_vars) & (correlation_df$Var2 %in% nonzero_vars), ]
+  # correlazione media presente
+  P2 <- ifelse(nrow(correlation_df_enet_interior) == 0, 1, sum(correlation_df_enet_interior$abs_value) / nrow(correlation_df_enet_interior))
+  P = (1-P1)*P2
+  Ps=c(Ps,P)
+  
+  cat("alpha: ",alpha," P: ",P,"\n")
+}
+
+loess_fit <- loess(Ps ~ alphas, span = 0.3)  
+Ps_smooth <- predict(loess_fit, newdata = alphas)
+max_index <- which.max(Ps_smooth)
+alpha_max <- alphas[max_index]
+alpha_max
+P_max <- Ps_smooth[max_index]
+plot(alphas, Ps, pch = 16, col = "gray")
+lines(alphas, Ps_smooth, lwd = 2)
+
+
+
 ################################ CLUSTER ANALYSIS ######################################
 
 cor_matrix <- cor(X_train)
@@ -592,45 +636,85 @@ cat("Largest community for y=0:", largest_community_0, "with size:", community_s
 
 
 
-######################### ALPHA SELECTION ELASTIC NET ##########################
-Ps = c()
-alphas = seq(from = 0, to = 1, length.out = 1000)
+###################### ALPHA SELECTION ELASTIC NET #############################
+phis = c()
+ss = c()
+rhos = c()
+alphas = seq(from = 0, to = 1, length.out = 25)
+#alphas= alphas[-1]
+#alpha = alphas[1]
 for (alpha in alphas) 
 {
   cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
   best_lambda <- cv_fit$lambda.min
+  
   elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
   
   # estraggo i coefficienti diversi da 0 (nonzero_vars)
   coef_enet <- coef(elastic_net_model)
   coef_values <- as.vector(coef_enet[-1])  
   names(coef_values) <- rownames(coef_enet)[-1] 
-  nonzero_vars <- names(coef_values[coef_values != 0])
-  #nonzero_vars
-  #nonzero_vars = c("num_of_pendown5","paper_time25","air_time24")
-  #nonzero_vars = c()
-
-  correlation_df_enet_boundary <- correlation_df[xor(correlation_df$Var1 %in% nonzero_vars, correlation_df$Var2 %in% nonzero_vars), ]
-  # correlazione media mancante
-  P1 <- ifelse(nrow(correlation_df_enet_boundary) == 0, 0, sum(correlation_df_enet_boundary$abs_value) / nrow(correlation_df_enet_boundary))
-  correlation_df_enet_interior <- correlation_df[(correlation_df$Var1 %in% nonzero_vars) & (correlation_df$Var2 %in% nonzero_vars), ]
-  # correlazione media presente
-  P2 <- ifelse(nrow(correlation_df_enet_interior) == 0, 1, sum(correlation_df_enet_interior$abs_value) / nrow(correlation_df_enet_interior))
-  P = (1-P1)*P2
-  Ps=c(Ps,P)
+  S_alpha <- names(coef_values[coef_values != 0])
   
-  cat("alpha: ",alpha," P: ",P,"\n")
+  
+  # correlation_df <- data.frame(
+  #   Var1 =     c("X1",  "X1",  "X1",  "X2",  "X2",  "X3"),
+  #   Var2 =     c("X2",  "X3",  "X4",  "X3" , "X4",  "X4"),
+  #   abs_value =c( 0,     0,      0,    1,      1,     0 )
+  # )
+  # S_alpha = c("X1","X3","X4")
+  
+  pi_x <- numeric(length(S_alpha))
+  names(pi_x) <- S_alpha
+  
+  
+  # For each selected variable, calculate the sum of absolute correlations
+  for (x in S_alpha) 
+  {
+    
+    
+    #x = "X1"
+    
+    
+    related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
+    related_correlations_not_selected <- related_correlations[
+      xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
+    ]
+    sum_related_correlations = sum(related_correlations$abs_value2)
+    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value2)
+    
+    pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
+    
+  }
+  
+  pi_alpha = sum(pi_x)/length(S_alpha)
+  sigma_alpha = 1-length(S_alpha)/450
+  phi_alpha = pi_alpha*sigma_alpha
+  
+  
+  phis = c(phis,phi_alpha)
+  rhos = c(rhos,pi_alpha)
+  ss = c(ss,sigma_alpha)
+  cat("alpha:, ",alpha, "phi: ",phi_alpha,"\n")
+  
 }
 
-loess_fit <- loess(Ps ~ alphas, span = 0.3)  
+
+loess_fit <- loess(phis ~ alphas, span = 0.3)  
 Ps_smooth <- predict(loess_fit, newdata = alphas)
 max_index <- which.max(Ps_smooth)
 alpha_max <- alphas[max_index]
 alpha_max
-P_max <- Ps_smooth[max_index]
-plot(alphas, Ps, pch = 16, col = "gray")
+plot(alphas, phis, pch = 16, col = "gray")
 lines(alphas, Ps_smooth, lwd = 2)
 
+plot(alphas,ss)
+plot(alphas,rhos)
+plot(alphas, ss, type = "l", col = "blue", lwd = 2, 
+     ylim = range(c(ss, rhos)),  
+     xlab = "Alpha", ylab = "Value")
+lines(alphas, rhos, col = "red", lwd = 2)
+lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
 ########################## ELASTIC NET STABILITY SELECTION #####################
 alpha = 0.12
 elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
@@ -962,7 +1046,7 @@ gbss.fit <- function(X, y, groups, s, nbest=5 )
   
 }
 
-# S: l'insieme di parametri di regolarizzazione da convalidazione incrociata
+# S: l'insieme di parametri di regolarizzazione da convalida incrociata
 cv.gbss <- function(X,y,S,groups,nfolds=3) 
 { 
   # la media dell'errori per ogni parametro
