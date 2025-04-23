@@ -53,11 +53,38 @@ correlation_df$abs_value2 <- ifelse(correlation_df$abs_value > 0.8,
 ###################
 #0 ridge 1 lasso
 
+#dato S ritornala correlazione media pesata per la sparsità
+phi <-function(S_alpha)
+{
+  pi_x <- numeric(length(S_alpha))
+  names(pi_x) <- S_alpha
+  
+  # For each selected variable, calculate the sum of absolute correlations
+  for (x in S_alpha) 
+  {
+    #x = "X1"
+    related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
+    related_correlations_not_selected <- related_correlations[
+      xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
+    ]
+    sum_related_correlations = sum(related_correlations$abs_value2)
+    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value2)
+    
+    pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
+    
+  }
+  
+  pi_alpha = sum(pi_x)/length(S_alpha)#correlazione media inclusa (rosso)
+  sigma_alpha = 1-length(S_alpha)/450#sparsità (blu)
+  phi_alpha = pi_alpha*sigma_alpha
+  return(c(phi_alpha, pi_alpha, sigma_alpha))
+}
 
+ 
 phis = c()
-ss = c()
-rhos = c()
-alphas = seq(from = 0, to = 1, length.out = 25)
+sigmas = c()
+pis = c()
+alphas = seq(from = 0, to = 1, length.out = 5)
 #alphas= alphas[-1]
 #alpha = alphas[1]
 for (alpha in alphas) 
@@ -73,47 +100,17 @@ for (alpha in alphas)
   names(coef_values) <- rownames(coef_enet)[-1] 
   S_alpha <- names(coef_values[coef_values != 0])
   
-  
-  # correlation_df <- data.frame(
-  #   Var1 =     c("X1",  "X1",  "X1",  "X2",  "X2",  "X3"),
-  #   Var2 =     c("X2",  "X3",  "X4",  "X3" , "X4",  "X4"),
-  #   abs_value =c( 0,     0,      0,    1,      1,     0 )
-  # )
-  # S_alpha = c("X1","X3","X4")
 
-  pi_x <- numeric(length(S_alpha))
-  names(pi_x) <- S_alpha
-  
-
-  # For each selected variable, calculate the sum of absolute correlations
-  for (x in S_alpha) 
-  {
-
-    
-    #x = "X1"
-    
-
-    related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
-    related_correlations_not_selected <- related_correlations[
-      xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
-    ]
-    sum_related_correlations = sum(related_correlations$abs_value2)
-    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value2)
-    
-    pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
-    
-  }
-  
-  pi_alpha = sum(pi_x)/length(S_alpha)
-  sigma_alpha = 1-length(S_alpha)/450
-  phi_alpha = pi_alpha*sigma_alpha
+  r = phi(S_alpha = S_alpha)
+  phi_alpha = r[1]
+  pi_alpha= r[2]
+  sigma_alpha = r[3]
   
   
   phis = c(phis,phi_alpha)
-  rhos = c(rhos,pi_alpha)
-  ss = c(ss,sigma_alpha)
+  pis = c(pis,pi_alpha)
+  sigmas = c(sigmas,sigma_alpha)
   cat("alpha:, ",alpha, "phi: ",phi_alpha,"\n")
-  
 }
 
 
@@ -125,11 +122,9 @@ alpha_max
 plot(alphas, phis, pch = 16, col = "gray")
 lines(alphas, Ps_smooth, lwd = 2)
 
-plot(alphas,ss)
-plot(alphas,rhos)
-plot(alphas, ss, type = "l", col = "blue", lwd = 2, 
-     ylim = range(c(ss, rhos)),  
-     xlab = "Alpha", ylab = "Value")
-lines(alphas, rhos, col = "red", lwd = 2)
+plot(alphas,sigmas)
+plot(alphas,pis)
+plot(alphas, sigmas, type = "l", col = "blue", lwd = 2, ylim = range(c(sigmas, pis)),  xlab = "Alpha", ylab = "Value")
+lines(alphas, pis, col = "red", lwd = 2)
 lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
 

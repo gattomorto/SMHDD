@@ -647,7 +647,7 @@ for (alpha in alphas)
 {
   cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
   best_lambda <- cv_fit$lambda.min
-  
+  #TODO: qui in teoria non serve questa riga
   elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
   
   # estraggo i coefficienti diversi da 0 (nonzero_vars)
@@ -671,10 +671,6 @@ for (alpha in alphas)
   # For each selected variable, calculate the sum of absolute correlations
   for (x in S_alpha) 
   {
-    
-    
-    #x = "X1"
-    
     
     related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
     related_correlations_not_selected <- related_correlations[
@@ -715,7 +711,8 @@ plot(alphas, ss, type = "l", col = "blue", lwd = 2,
      xlab = "Alpha", ylab = "Value")
 lines(alphas, rhos, col = "red", lwd = 2)
 lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
-########################## ELASTIC NET STABILITY SELECTION #####################
+
+##################### ELASTIC NET STABILITY SELECTION ##########################
 alpha = 0.12
 elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
 lambdas <- elastic_net_model$lambda
@@ -737,7 +734,7 @@ for (lambda_idx in seq_along(lambdas))
     
     subsample_model <- glmnet(X_subsample, y_subsample, alpha = alpha, family = "binomial", lambda = lambda)
     
-    coefficients <- coef(subsample_model, s = lambda)[-1]  # Exclude intercept
+    coefficients <- coef(subsample_model, s = lambda)[-1]
     # selected_features <- which(abs(coefficients) > 1e-6)?
     selected_features <- which(coefficients != 0)
     selection_frequencies[lambda_idx,selected_features] <- selection_frequencies[lambda_idx,selected_features] + 1

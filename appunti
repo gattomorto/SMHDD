@@ -27,10 +27,6 @@ A molecular signature can be either parsimonious or predictive, but not both.
  close to a pure ridge model.
  
  
-Each data point on the curve is one value of λ
-, the plots tend to look better by log(λ)
- though, so that has become a standard (glmnet)
- 
  
  Some authors propose overcoming the bias by using the LASSO for variable selection and then estimating the parameters of the selected subset using least squares
  
@@ -300,6 +296,15 @@ glmnet.fit Fit a GLM with elastic net regularization for a single value of lambd
 
         1         2         3         4         5 
 0.1836601 0.2888889 0.3388889 0.2898693 0.3790850 nfold = 10 (min = 1)
+
+
+  # correlation_df <- data.frame(
+  #   Var1 =     c("X1",  "X1",  "X1",  "X2",  "X2",  "X3"),
+  #   Var2 =     c("X2",  "X3",  "X4",  "X3" , "X4",  "X4"),
+  #   abs_value =c( 0,     0,      0,    1,      1,     0 )
+  # )
+  # S_alpha = c("X1","X3","X4")
+
 
 
 
