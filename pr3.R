@@ -454,6 +454,84 @@ lines(alphas, Ps_smooth, lwd = 2)
 
 
 
+
+
+
+########### ALPHA SELECTION ELASTIC NET OLD 2 (to be removed) ##################
+phis = c()
+ss = c()
+rhos = c()
+alphas = seq(from = 0, to = 1, length.out = 25)
+#alphas= alphas[-1]
+#alpha = alphas[1]
+for (alpha in alphas) 
+{
+  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  best_lambda <- cv_fit$lambda.min
+  #TODO: qui in teoria non serve questa riga
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
+  
+  # estraggo i coefficienti diversi da 0 (nonzero_vars)
+  coef_enet <- coef(elastic_net_model)
+  coef_values <- as.vector(coef_enet[-1])  
+  names(coef_values) <- rownames(coef_enet)[-1] 
+  S_alpha <- names(coef_values[coef_values != 0])
+  
+  
+  # correlation_df <- data.frame(
+  #   Var1 =     c("X1",  "X1",  "X1",  "X2",  "X2",  "X3"),
+  #   Var2 =     c("X2",  "X3",  "X4",  "X3" , "X4",  "X4"),
+  #   abs_value =c( 0,     0,      0,    1,      1,     0 )
+  # )
+  # S_alpha = c("X1","X3","X4")
+  
+  pi_x <- numeric(length(S_alpha))
+  names(pi_x) <- S_alpha
+  
+  
+  # For each selected variable, calculate the sum of absolute correlations
+  for (x in S_alpha) 
+  {
+    
+    related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
+    related_correlations_not_selected <- related_correlations[
+      xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
+    ]
+    sum_related_correlations = sum(related_correlations$abs_value2)
+    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value2)
+    
+    pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
+    
+  }
+  
+  pi_alpha = sum(pi_x)/length(S_alpha)
+  sigma_alpha = 1-length(S_alpha)/450
+  phi_alpha = pi_alpha*sigma_alpha
+  
+  
+  phis = c(phis,phi_alpha)
+  rhos = c(rhos,pi_alpha)
+  ss = c(ss,sigma_alpha)
+  cat("alpha:, ",alpha, "phi: ",phi_alpha,"\n")
+  
+}
+
+
+loess_fit <- loess(phis ~ alphas, span = 0.3)  
+Ps_smooth <- predict(loess_fit, newdata = alphas)
+max_index <- which.max(Ps_smooth)
+alpha_max <- alphas[max_index]
+alpha_max
+plot(alphas, phis, pch = 16, col = "gray")
+lines(alphas, Ps_smooth, lwd = 2)
+
+plot(alphas,ss)
+plot(alphas,rhos)
+plot(alphas, ss, type = "l", col = "blue", lwd = 2, 
+     ylim = range(c(ss, rhos)),  
+     xlab = "Alpha", ylab = "Value")
+lines(alphas, rhos, col = "red", lwd = 2)
+lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
 ################################ CLUSTER ANALYSIS ######################################
 
 cor_matrix <- cor(X_train)
@@ -637,41 +715,18 @@ cat("Largest community for y=0:", largest_community_0, "with size:", community_s
 
 
 ###################### ALPHA SELECTION ELASTIC NET #############################
-phis = c()
-ss = c()
-rhos = c()
-alphas = seq(from = 0, to = 1, length.out = 25)
-#alphas= alphas[-1]
-#alpha = alphas[1]
-for (alpha in alphas) 
+#0 ridge 1 lasso
+
+#dato S ritornala correlazione media pesata per la sparsità
+phi_ <-function(S_alpha)
 {
-  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-  best_lambda <- cv_fit$lambda.min
-  #TODO: qui in teoria non serve questa riga
-  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
-  
-  # estraggo i coefficienti diversi da 0 (nonzero_vars)
-  coef_enet <- coef(elastic_net_model)
-  coef_values <- as.vector(coef_enet[-1])  
-  names(coef_values) <- rownames(coef_enet)[-1] 
-  S_alpha <- names(coef_values[coef_values != 0])
-  
-  
-  # correlation_df <- data.frame(
-  #   Var1 =     c("X1",  "X1",  "X1",  "X2",  "X2",  "X3"),
-  #   Var2 =     c("X2",  "X3",  "X4",  "X3" , "X4",  "X4"),
-  #   abs_value =c( 0,     0,      0,    1,      1,     0 )
-  # )
-  # S_alpha = c("X1","X3","X4")
-  
   pi_x <- numeric(length(S_alpha))
   names(pi_x) <- S_alpha
-  
   
   # For each selected variable, calculate the sum of absolute correlations
   for (x in S_alpha) 
   {
-    
+    #x = "X1"
     related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
     related_correlations_not_selected <- related_correlations[
       xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
@@ -683,35 +738,38 @@ for (alpha in alphas)
     
   }
   
-  pi_alpha = sum(pi_x)/length(S_alpha)
+  pi_alpha <-ifelse(length(S_alpha) == 0, 0, sum(pi_x)/length(S_alpha))
   sigma_alpha = 1-length(S_alpha)/450
   phi_alpha = pi_alpha*sigma_alpha
-  
-  
-  phis = c(phis,phi_alpha)
-  rhos = c(rhos,pi_alpha)
-  ss = c(ss,sigma_alpha)
-  cat("alpha:, ",alpha, "phi: ",phi_alpha,"\n")
-  
+  return(phi_alpha)
 }
 
+nlambda = 5
+nalpha = 5
+alphas = seq(from = 0, to = 1, length.out = nalpha)
+alphas = alphas[-1]
+phis <- data.frame(alpha = numeric(0), lambda = numeric(0), phi = numeric(0))
 
-loess_fit <- loess(phis ~ alphas, span = 0.3)  
-Ps_smooth <- predict(loess_fit, newdata = alphas)
-max_index <- which.max(Ps_smooth)
-alpha_max <- alphas[max_index]
-alpha_max
-plot(alphas, phis, pch = 16, col = "gray")
-lines(alphas, Ps_smooth, lwd = 2)
-
-plot(alphas,ss)
-plot(alphas,rhos)
-plot(alphas, ss, type = "l", col = "blue", lwd = 2, 
-     ylim = range(c(ss, rhos)),  
-     xlab = "Alpha", ylab = "Value")
-lines(alphas, rhos, col = "red", lwd = 2)
-lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
-
+for (alpha in alphas) 
+{
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, nlambda = nlambda, family = "binomial")
+  lambdas <- elastic_net_model$lambda
+  for (lambda in lambdas)
+  {
+    coef_enet <- coef(elastic_net_model,s = lambda)
+    coef_values <- as.vector(coef_enet[-1])  
+    names(coef_values) <- rownames(coef_enet)[-1] 
+    S_alpha <- names(coef_values[coef_values != 0])
+    phi = phi_(S_alpha = S_alpha)
+    phis <- rbind(phis, data.frame(alpha = alpha, lambda = lambda, phi = phi))
+    cat("alpha:",alpha,"lambda:",lambda,  "phi:", phi,"\n")
+  }
+  
+}
+max_row <- phis[which.max(phis$phi), ]
+max_row
+#         alpha    lambda       phi
+# 103 0.1666667 0.9457503 0.7128748
 ##################### ELASTIC NET STABILITY SELECTION ##########################
 alpha = 0.12
 elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")

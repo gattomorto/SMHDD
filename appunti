@@ -20,125 +20,35 @@ A molecular signature can be either parsimonious or predictive, but not both.
 — FE Harrell, 2009
 
 
-#################################QUI########################̂
 
 α is often chosen based on intent and domain knowledge. Do you want a sparse model with many zero coefficients? Then chose α
  close to a pure lasso regression. Do you want a dense model with many non-zero but small coefficients? Then chose α
  close to a pure ridge model.
  
- 
- 
- Some authors propose overcoming the bias by using the LASSO for variable selection and then estimating the parameters of the selected subset using least squares
+
  
  to quote Hastie and Zou, "If there is a group of variables among which the pairwise correlations are very high, then the lasso tends to select only one variable from the group and does not care which one is selected." This is a problem, for instance, because it means that we're not likely to find an element of the true support using the lasso--just one highly correlated with it
  
- 
- 
- 
- #The biggest challenge of elastic net regression over ridge and lasso regression is simply that we have an additional hyperparameter to tune, α. We can address this complication by simply running our cv.glmnet function with a wide range of alphas. We can do this by running a for loop.
 
-
-Techniques like Principal Component Analysis (PCA) or clustering methods can leverage these groups (of highly correlated vars) to create new, uncorrelated features
-
-
-Subject-matter expertise is critical to interpret clusters meaningfully (e.g., variables in a cluster might represent a latent construct like "economic activity").
-
-
-If you want to group variables based on how strongly they are related (regardless of whether the relationship is positive or negative), abs(cor_matrix)
 
 scaling prima di fare clustering?
 
 controlla se tutti i metodi vogliono o non vogliono scaling
 
-La soglia 0.8 è arbitraria, ma se scelta con criterio (ad esempio, in base a validazione incrociata o considerazioni sul dominio), il metodo è sensato.
 
 lambda param della funzione glmnet:
 A user supplied lambda sequence. Typical usage is to have the program compute its own lambda sequence based on nlambda and lambda.min.ratio. Supplying a value of lambda overrides this. WARNING: use with care. Avoid supplying a single value for lambda (for predictions after CV use predict() instead). Supply instead a decreasing sequence of lambda values. glmnet relies on its warms starts for speed, and its often faster to fit a whole path than compute a single fit.
 
-(llm)
-The lambdas vector comes directly from the initial glmnet fit on the full dataset. While this is common practice, note that these lambda values may not be optimal for the smaller subsamples. Subsamples can have different scaling or variance properties, which might affect the regularization path
 
 chatgpt consiglia
 selected_features <- which(abs(coefficients) > 1e-6)
 
-
-sgl alpha = 0.95
-lambda:  0.0185 : NULL
-lambda:  0.01826316 : NULL
-lambda:  0.01802632 : NULL
-lambda:  0.01778947 : [1] 23
-lambda:  0.01755263 : [1]  7 23
-lambda:  0.01731579 : [1]  7 23
-lambda:  0.01707895 : [1]  7 23
-lambda:  0.01684211 : [1]  7 23
-lambda:  0.01660526 : [1]  7  9 23
-lambda:  0.01636842 : [1]  7  9 23
-lambda:  0.01613158 : [1]  7  9 23
-lambda:  0.01589474 : [1]  7  9 23
-lambda:  0.01565789 : [1]  7  9 16 23
-lambda:  0.01542105 : [1]  7  9 16 23
-lambda:  0.01518421 : [1]  7  9 16 23
-lambda:  0.01494737 : [1]  7  9 16 23
-lambda:  0.01471053 : [1]  7  9 16 23
-lambda:  0.01447368 : [1]  7  9 16 23
-lambda:  0.01423684 : [1]  7  9 16 23
-lambda:  0.014 : [1]  7  9 16 23
-
-
-
-gglasso:
-lambda:  0.15 : [1] 7
-lambda:  0.1473684 : [1] 7
-lambda:  0.1447368 : [1] 7
-lambda:  0.1421053 : [1]  7 17
-lambda:  0.1394737 : [1]  7 17
-lambda:  0.1368421 : [1]  7 17
-lambda:  0.1342105 : [1]  7 17 23
-lambda:  0.1315789 : [1]  7  9 17 23
-lambda:  0.1289474 : [1]  7  9 17 23 25
-lambda:  0.1263158 : [1]  7  9 17 23 25
-lambda:  0.1236842 : [1]  7  9 17 23 25
-lambda:  0.1210526 : [1]  7  9 17 23 25
-lambda:  0.1184211 : [1]  7  9 17 23 25
-lambda:  0.1157895 : [1]  7  9 17 23 25
-lambda:  0.1131579 : [1]  7  9 17 23 25
-lambda:  0.1105263 : [1]  7  9 17 23 25
-lambda:  0.1078947 : [1]  7  9 17 23 25
-lambda:  0.1052632 : [1]  7  9 17 23 25
-lambda:  0.1026316 : [1]  7  9 17 23 25
-lambda:  0.1 : [1]  7  9 17 23 25
-
-sgl alpha = 0
-lambda:  0.0129 : [1] 7
-lambda:  0.01274737 : [1] 7
-lambda:  0.01259474 : [1] 7
-lambda:  0.01244211 : [1] 7
-lambda:  0.01228947 : [1]  7 17
-lambda:  0.01213684 : [1]  7 17
-lambda:  0.01198421 : [1]  7 17
-lambda:  0.01183158 : [1]  7 17
-lambda:  0.01167895 : [1]  7 17
-lambda:  0.01152632 : [1]  7 17
-lambda:  0.01137368 : [1]  7 17 23
-lambda:  0.01122105 : [1]  7  9 17 23
-lambda:  0.01106842 : [1]  7  9 17 23
-lambda:  0.01091579 : [1]  7  9 17 23 25
-lambda:  0.01076316 : [1]  7  9 17 23 25
-lambda:  0.01061053 : [1]  7  9 17 23 25
-lambda:  0.01045789 : [1]  7  9 17 23 25
-lambda:  0.01030526 : [1]  7  9 17 23 25
-lambda:  0.01015263 : [1]  7  9 17 23 25
-lambda:  0.01 : [1]  7  9 17 23 25
 
 
 It is important to recognize the difficulty of the selection and estimation tasks by bootstrapping the whole process to put confidence intervals on such variable importance estimates. It amazes me how so many applied fields will insist on p-values or confidence intervals, only to forget about uncertainty when machine learning calculates feature importance. If you wouldn't accept a mean without some kind of test or interval estimate, why is feature importance exempt from this?--
 nel senso che i coefficienti dipendono dal sample
 
 i difetti sono che il modello è lineare e non considero le interazioni
-
-Meinshausen & Bühlmann (2010) – "Stability Selection"
-Shows that variable selection by Lasso is unstable and highly dependent on the sample.
-Proposes stability selection, a bootstrap-based method to assess true importance.
 
 The variable that enters the model first (i.e., becomes non-zero) as lambda decreases is typically the one with the strongest correlation with the response variable
 
@@ -219,7 +129,6 @@ If BMI is a hub, it might indicate that BMI strongly influences other health met
 
 Conditional Dependence : An edge between variables X and Y indicates they are conditionally dependent given all other variables. This means their relationship is not fully explained by other variables in the model.(llm)
 
-e se faccio glasso solo sulle variabili selezionate da lasso?
 
 2. **Feature selection or dimensionality reduction**: Graphical Lasso could potentially help in identifying a subset of features that are most relevant for distinguishing between Alzheimer's patients and healthy controls by examining the sparsity pattern in the estimated precision matrix.
 
@@ -268,20 +177,6 @@ Interpret communities in the context of the DARWIN tasks (e.g., motor control fe
 fare fit ols sulle feature trovate per vedere i segni dei beta!??
 
 glmnet.fit Fit a GLM with elastic net regularization for a single value of lambda---credo che tu usi glmnet()
-
-        1         2         3 
-0.2126437 0.3563218 0.2701149
-
-
-        1         2 
-0.3333333 0.3160920 grouop task
-        2 
-0.2586207 
-
-        1         2 
-0.1954023 0.2873563 grop feature
-        2 
-0.2298851
 
 
 

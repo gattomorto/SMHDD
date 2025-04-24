@@ -54,7 +54,7 @@ correlation_df$abs_value2 <- ifelse(correlation_df$abs_value > 0.8,
 #0 ridge 1 lasso
 
 #dato S ritornala correlazione media pesata per la sparsità
-phi <-function(S_alpha)
+phi_ <-function(S_alpha)
 {
   pi_x <- numeric(length(S_alpha))
   names(pi_x) <- S_alpha
@@ -74,57 +74,37 @@ phi <-function(S_alpha)
     
   }
   
-  pi_alpha = sum(pi_x)/length(S_alpha)#correlazione media inclusa (rosso)
-  sigma_alpha = 1-length(S_alpha)/450#sparsità (blu)
+  pi_alpha <-ifelse(length(S_alpha) == 0, 0, sum(pi_x)/length(S_alpha))
+  sigma_alpha = 1-length(S_alpha)/450
   phi_alpha = pi_alpha*sigma_alpha
-  return(c(phi_alpha, pi_alpha, sigma_alpha))
+  return(phi_alpha)
 }
 
- 
-phis = c()
-sigmas = c()
-pis = c()
-alphas = seq(from = 0, to = 1, length.out = 5)
-#alphas= alphas[-1]
-#alpha = alphas[1]
+nlambda = 5
+nalpha = 5
+alphas = seq(from = 0, to = 1, length.out = nalpha)
+alphas = alphas[-1]
+phis <- data.frame(alpha = numeric(0), lambda = numeric(0), phi = numeric(0))
+
 for (alpha in alphas) 
 {
-  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial")
-  best_lambda <- cv_fit$lambda.min
-  
-  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, lambda = best_lambda, family = "binomial")
-  
-  # estraggo i coefficienti diversi da 0 (nonzero_vars)
-  coef_enet <- coef(elastic_net_model)
-  coef_values <- as.vector(coef_enet[-1])  
-  names(coef_values) <- rownames(coef_enet)[-1] 
-  S_alpha <- names(coef_values[coef_values != 0])
-  
+  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, nlambda = nlambda, family = "binomial")
+  lambdas <- elastic_net_model$lambda
+  for (lambda in lambdas)
+  {
+    coef_enet <- coef(elastic_net_model,s = lambda)
+    coef_values <- as.vector(coef_enet[-1])  
+    names(coef_values) <- rownames(coef_enet)[-1] 
+    S_alpha <- names(coef_values[coef_values != 0])
+    phi = phi_(S_alpha = S_alpha)
+    phis <- rbind(phis, data.frame(alpha = alpha, lambda = lambda, phi = phi))
+    cat("alpha:",alpha,"lambda:",lambda,  "phi:", phi,"\n")
+  }
 
-  r = phi(S_alpha = S_alpha)
-  phi_alpha = r[1]
-  pi_alpha= r[2]
-  sigma_alpha = r[3]
-  
-  
-  phis = c(phis,phi_alpha)
-  pis = c(pis,pi_alpha)
-  sigmas = c(sigmas,sigma_alpha)
-  cat("alpha:, ",alpha, "phi: ",phi_alpha,"\n")
 }
+max_row <- phis[which.max(phis$phi), ]
+max_row
+#         alpha    lambda       phi
+# 103 0.1666667 0.9457503 0.7128748
 
-
-loess_fit <- loess(phis ~ alphas, span = 0.3)  
-Ps_smooth <- predict(loess_fit, newdata = alphas)
-max_index <- which.max(Ps_smooth)
-alpha_max <- alphas[max_index]
-alpha_max
-plot(alphas, phis, pch = 16, col = "gray")
-lines(alphas, Ps_smooth, lwd = 2)
-
-plot(alphas,sigmas)
-plot(alphas,pis)
-plot(alphas, sigmas, type = "l", col = "blue", lwd = 2, ylim = range(c(sigmas, pis)),  xlab = "Alpha", ylab = "Value")
-lines(alphas, pis, col = "red", lwd = 2)
-lines(alphas, Ps_smooth, lwd = 2,col="darkgreen")
 
