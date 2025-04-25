@@ -1028,6 +1028,7 @@ for (stable_group in stable_groups) {
   cat(features_in_group, "\n\n")
 }
 
+
 ######################## GROUP BEST SUBSET SELECTION ##########################
 
 # (group num - 1)*18 + 1 = dove inizia il gruppo 
@@ -1059,8 +1060,9 @@ gbss.fit <- function(X, y, groups, s, nbest=5 )
     feature_selector <- groups %in% subsets[i,]
     X_selected <- X[, feature_selector, drop = FALSE]
     model <- glm(y ~ ., data = data.frame(y, X_selected), family = binomial, singular.ok = TRUE ,control = glm.control(maxit = 1000))
-    
     deviance[i] <-  model$deviance#rimuovere
+    model$subset = subsets[i,]
+    
     
     prob_predictions <- predict(model, newdata = data.frame(X_selected), type = "response")
     y_pred <- ifelse(prob_predictions > 0.5, 1, 0)#rimuovere
@@ -1142,5 +1144,32 @@ cv.gbss <- function(X,y,S,groups,nfolds=3)
 
 feature_groups <- rep(1:18, times = 25)
 task_goups <- rep(1:25, each = 18) 
-xx = cv.gbss(X,y,S=c(1,2,3,4,5), groups=feature_groups, nfolds = 10)
+#xx = cv.gbss(X,y,S=c(1,2,3,4,5), groups=feature_groups, nfolds = 10)
 #model <- gbss.fit(X,y,feature_groups,xx$s.min)
+
+######################### GBSS STABILITY SELECTION #############################
+best_size = 5
+groups = feature_groups
+
+num_subsamples <- 5
+subsample_size <- floor(nrow(X_train) * 0.75)
+all_subsets <- list()
+#TODO: replace = TRUE?
+for (i in 1:num_subsamples)
+{
+  subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
+  X_subsample <- X_train[subsample_indices, ]
+  y_subsample <- y_train[subsample_indices]
+  
+  #subsample_model <- glmnet(X_subsample, y_subsample, alpha = alpha, family = "binomial", lambda = lambda)
+  #coefficients <- coef(subsample_model, s = lambda)[-1]
+  gbss_result <- gbss.fit(X_subsample,y_subsample,groups,s=best_size)
+  subset = gbss_result$model$subset
+  subset_str <- paste(subset, collapse = ",")
+  print(subset_str)
+  all_subsets[[i]] <- subset_str
+  
+}
+
+subset_counts <- sort(table(unlist(all_subsets)), decreasing = TRUE)
+subset_counts
