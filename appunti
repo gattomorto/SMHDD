@@ -203,5 +203,33 @@ glmnet.fit Fit a GLM with elastic net regularization for a single value of lambd
 
 
 
+One of the major drawbacks of Lasso is that it tends to se- lect only a small subset from a large group of strongly correlated co-variates -- (Identifying groups of strongly correlated variables through Smoothed Ordered Weighted l1-norms)
 
+Using the l1-norm to regularize the estimation of the parameter vector of a linear model leads to an unstable estimator when covariates are highly correlated -- (Trace Lasso: a trace norm regularization for correlated designs)
  
+In recent years, a large body of work has shown that the Lasso was performing optimally in high- dimensional low-correlation settings, both in terms of prediction [6], estimation of parameters or estimation of supports [7, 8]. However, most data exhibit strong correlations, with various correla- tion structures, such as clusters (i.e., close to block-diagonal covariance matrices) or sparse graphs, such as for example problems involving sequences (in which case, the covariance matrix is close to a Toeplitz matrix [9]). In these situations, the Lasso is known to have stability problems: although its predictive performance is not disastrous, the selected predictor may vary a lot (typically, given two correlated variables, the Lasso will only select one of the two, at random). -- (Trace Lasso: a trace norm regularization for correlated designs)
+
+
+When the model includes several highly correlated variables, all of which are related to some extent to the response variable, lasso tends to pick only one or a few of them and shrinks the rest to 0. This may not be a desirable feature. For example, in microarray analysis, expression levels of genes that share one common biological pathway are usually highly correlated, and these genes may all contribute to the biological process, but lasso usually selects only one gene from the group. An ideal method should be able to select all relevant genes, highly correlated or not, while eliminating trivial genes.--(RANDOM LASSO)
+
+However, Lasso performs erratically when features are correlated. This limits the use of such algorithms in biological problems, where features such as genes often work together in path- ways, leading to sets of highly correlated feature ----Therefore, Lasso will not discover all informative features when there is a strong correlation structure in the data.-- (2002.12460)
+
+It is well-known that the ‘0-norm regularizer is optimal in variable selection, -- (bioinformatics_35_7_1181)
+
+Gene expression profiles can result in unstable variable selection. As expression levels of genes within a regulatory pathway are highly correlated (Michalopoulos et al., 2012), the Lasso will be unstable for selection of variables when several of the variables participate in the same regulatory pathway. This can lead researchers to believe that a single element of the pathway is likely to be causal for a phenotype (based on variable selection), when in reality the evidence is shared between all elements of the pathway.
+-- (bioinformatics_35_7_1181)
+
+Selecting the true direct predictors of an outcome, relative to a large set of available variables, is a distinctly different problem from prediction accuracy and of much substantial interest in its own right
+-- (Biometrical J - 2023 - Hanke - Variable selection in linear regression models  Choosing the best subset is not always the)
+
+Collinearity is especially problematic when a model’s purpose is explanation rather than prediction --
+As a disclaimer, variables do not need to be highly correlated for
+multicollinearity to exist, though this is oftentimes the case
+131_Final_Paper_PDF
+
+best subset selection è un estimator!
+
+Due to com- putational cost, the most used criteria to fit a LASSO adjustment are cross-validation tech- niques. Nevertheless, it can be showed that this criterion achieves an adequate λ value for prediction risk, but this leads to inconsistent model selection for sparse methods (see Meinshausen & Bühlmann, 2006)
+Int Statistical Rev
+
+Resampling LASSO procedures
