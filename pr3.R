@@ -9,6 +9,10 @@ library(leaps)
 library(igraph)
 library(glasso)
 library(qgraph)
+library(plotly)
+library(mgcv)
+
+
 
 #perchè ce due volta as factor?
 rm(list=ls())
@@ -23,7 +27,7 @@ set.seed(0)
 
 ############################ PAIRWISE CORRELATION ##############################
 
-correlation_matrix <- cor(X_train)
+correlation_matrix <- cor(X)
 # perchè la matrice ha la metà delle informazioni rindondanti
 correlation_df <- melt(correlation_matrix)
 correlation_df <- correlation_df[order(-abs(correlation_df$value)), ]
@@ -143,28 +147,30 @@ phi_ <-function(S_alpha)
     related_correlations_not_selected <- related_correlations[
       xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
     ]
-    sum_related_correlations = sum(related_correlations$abs_value2)
-    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value2)
+    sum_related_correlations = sum(related_correlations$abs_value)
+    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value)
     
     pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
     
   }
   
-  pi_alpha <-ifelse(length(S_alpha) == 0, 0, sum(pi_x)/length(S_alpha))
+  pi_alpha <- ifelse(length(S_alpha) == 0, 0, sum(pi_x)/length(S_alpha))
   sigma_alpha = 1-length(S_alpha)/450
   phi_alpha = pi_alpha*sigma_alpha
   return(phi_alpha)
 }
 
-nlambda = 5
-nalpha = 5
-alphas = seq(from = 0, to = 1, length.out = nalpha)
+nlambda = 50
+nalpha = 50
+alphas = seq(from = 0, to = 0.003, length.out = nalpha)
+#alphas=10^seq(log10(1e-6), log10(1), length.out = nalpha)
 alphas = alphas[-1]
 phis <- data.frame(alpha = numeric(0), lambda = numeric(0), phi = numeric(0))
 
+
 for (alpha in alphas) 
 {
-  elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, nlambda = nlambda, family = "binomial",standardize = TRUE)
+  elastic_net_model <- glmnet(X, y, alpha = alpha, nlambda = nlambda, family = "binomial",standardize = TRUE)
   lambdas <- elastic_net_model$lambda
   for (lambda in lambdas)
   {
@@ -180,42 +186,114 @@ for (alpha in alphas)
 }
 max_row <- phis[which.max(phis$phi), ]
 max_row
-#         alpha    lambda       phi
-# 103 0.1666667 0.9457503 0.7128748
+
+top10_rows <- phis[order(phis$phi, decreasing = TRUE), ][1:10, ]
+
+
+#           alpha   lambda       phi
+#    0.0006122449 191.7164 0.3340376
+
+
+########################
+grid_alpha <- seq(min(phis$alpha), max(phis$alpha), length.out = 100)
+grid_lambda <- seq(min(phis$lambda), max(phis$lambda), length.out = 100)
+grid_matrix <- expand.grid(alpha = grid_alpha, lambda = grid_lambda)
+
+
+fit_gam <- gam(phi ~ s(alpha, lambda), data = phis)
+
+grid_matrix$phi_pred <- predict(fit_gam, newdata = grid_matrix)
+
+
+#######################################################
+
+
+# Reshape the predicted surface for plotting
+z_matrix <- matrix(grid_matrix$phi_pred, 
+                   nrow = length(unique(grid_matrix$lambda)), 
+                   ncol = length(unique(grid_matrix$alpha)))
+
+# 3D plot with surface and original data points
+plot_ly() %>%
+  add_surface(
+    x = ~unique(grid_matrix$alpha),
+    y = ~unique(grid_matrix$lambda),
+    z = ~z_matrix,
+    colorscale = "Viridis",
+    showscale = TRUE
+  ) %>%
+  add_markers(
+    data = phis,
+    x = ~alpha,
+    y = ~lambda,
+    z = ~phi,
+    marker = list(size = 2, color = "black"),
+    name = "Original φ"
+  ) %>%
+  layout(
+    title = "Smoothed φ Surface with Original Points",
+    scene = list(
+      xaxis = list(title = "α"),
+      yaxis = list(title = "λ"),
+      zaxis = list(title = "φ")
+    )
+  )
+
+########################
+
+
+plot_ly(
+  data = phis,
+  x = ~alpha,
+  y = ~lambda,
+  z = ~phi,
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 3, color = ~phi, colorscale = "Viridis", showscale = TRUE)
+) %>%
+  layout(
+    title = "3D Scatter Plot of φ by α and λ",
+    scene = list(
+      xaxis = list(title = "α"),
+      yaxis = list(title = "λ"),
+      zaxis = list(title = "φ")
+    )
+  )
+
+
 ##################### ELASTIC NET STABILITY SELECTION ##########################
-alpha = 0.16
-lambda = 
-elastic_net_model <- glmnet(X_train, y_train, alpha = alpha, family = "binomial" ,standardize = TRUE)
-lambdas <- elastic_net_model$lambda
 
-num_features <- ncol(X_train)
-selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol =num_features )
-num_subsamples <- 100
-subsample_size <- floor(nrow(X_train) / 2)
+top10_rows <- phis[order(phis$phi, decreasing = TRUE), ][1:10, ]
 
-for (lambda_idx in seq_along(lambdas)) 
+num_features <- ncol(X)
+selection_frequencies <- matrix(0, nrow = nrow(top10_rows) , ncol =num_features )
+num_subsamples <- 1000
+subsample_size <- floor(nrow(X) / 2)
+
+for (j in 1:nrow(top10_rows)) 
 {
-  lambda <- lambdas[lambda_idx]
-  print(lambda_idx)
+  row <- top10_rows[j, ]
+  print(row)
   for (i in 1:num_subsamples)
   {
-    subsample_indices <- sample(1:nrow(X_train), subsample_size, replace = FALSE)
-    X_subsample <- X_train[subsample_indices, ]
-    y_subsample <- y_train[subsample_indices]
+    subsample_indices <- sample(1:nrow(X), subsample_size, replace = FALSE)
+    X_subsample <- X[subsample_indices, ]
+    y_subsample <- y[subsample_indices]
     
-    subsample_model <- glmnet(X_subsample, y_subsample, alpha = alpha, family = "binomial", lambda = lambda ,standardize = TRUE)
+    subsample_model <- glmnet(X_subsample, y_subsample, alpha = row$alpha, family = "binomial", lambda = row$lambda ,standardize = TRUE)
     
     coefficients <- coef(subsample_model, s = lambda)[-1]
     # selected_features <- which(abs(coefficients) > 1e-6)?
     selected_features <- which(coefficients != 0)
-    selection_frequencies[lambda_idx,selected_features] <- selection_frequencies[lambda_idx,selected_features] + 1
+    #print(selected_features)
+    selection_frequencies[j,selected_features] <- selection_frequencies[j,selected_features] + 1
   }
 }
 selection_probabilities <- selection_frequencies / num_subsamples
 max_selection_probabilities <- apply(selection_probabilities, 2, max)
 
-stable_indices <- which(max_selection_probabilities >= 0.8)
-feature_names <- colnames(X_train)
+stable_indices <- which(max_selection_probabilities >= 0.9)
+feature_names <- colnames(X)
 stable_feature_names <- feature_names[stable_indices]
 stable_feature_names
 

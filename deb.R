@@ -8,71 +8,160 @@ library(reshape2)
 library(leaps)
 library(igraph)
 library(glasso)
-library(ggplot2)
-library(readr)
-library(glasso)
-library(igraph)
+library(qgraph)
 
-
+#perchè ce due volta as factor?
 rm(list=ls())
 data <- read_csv("DARWIN.csv", col_names = TRUE)
-data <- data[, -1]  # Remove the first column (Patient ID)
-y <- as.factor(data[[ncol(data)]]) 
+data <- data[, -1]  # remove the first column (Patient ID)
+y <- data[[ncol(data)]] 
 X <- as.matrix(data[, -ncol(data)]) 
-y <- as.factor(ifelse(y == "P", 1, 0))  # "P" → 1, "H" → 0
-X <- scale(X)
+#y <- as.factor(ifelse(y == "P", 1, 0))  # "P" → 1, "H" → 0
+y <- ifelse(y == "P", 1, 0) # "P" → 1, "H" → 0
+
 set.seed(0) 
 
+correlation_matrix <- cor(X)
+# perchè la matrice ha la metà delle informazioni rindondanti
+correlation_df <- melt(correlation_matrix)
+correlation_df <- correlation_df[order(-abs(correlation_df$value)), ]
+correlation_df <- correlation_df[correlation_df$Var1 != correlation_df$Var2, ]
+correlation_df$pair <- apply(correlation_df[, c("Var1", "Var2")], 1, function(x) paste(sort(x), collapse = "_"))
+correlation_df <- correlation_df[!duplicated(correlation_df$pair), ]
+correlation_df$pair <- NULL
+correlation_df$abs_value = abs(correlation_df$value)
+correlation_df$abs_value2 <- ifelse(correlation_df$abs_value > 0.8,
+                                    correlation_df$abs_value,
+                                    0)
 
-################################################################################
-#intercept dov'è?
-group_stability_selection <- function(X,y,groups, num_subsamples = 100, nlam = 20 ,thr=0.9)
+
+
+
+
+################## ALPHA LAMBDA SELECTION ELASTIC NET ##########################
+#0 ridge 1 lasso
+
+#dato S ritornala correlazione media pesata per la sparsità
+phi_ <-function(S_alpha)
 {
-  y <- ifelse(y == 1, 1, 0)
+  pi_x <- numeric(length(S_alpha))
+  names(pi_x) <- S_alpha
   
-  data <- list(x = X, y = y)
-  SGL_model <- SGL(data,groups, type="logit",standardize = TRUE, nlam = nlam ,verbose = TRUE, alpha = 0)
-  lambdas <- SGL_model$lambdas
-  print(lambdas)
-  num_groups <- length(unique(groups))
-  selection_frequencies <- matrix(0, nrow =length(lambdas) , ncol = num_groups )
-  #num_subsamples <- 100
-  subsample_size <- floor(nrow(X) / 2)
-  
-  for (lambda_idx in seq_along(lambdas)) 
+  # For each selected variable, calculate the sum of absolute correlations
+  for (x in S_alpha) 
   {
-    lambda <- lambdas[lambda_idx]
-    print(lambda_idx)
-    for (i in 1:num_subsamples)
-    {
-      subsample_indices <- sample(1:nrow(X), subsample_size, replace = FALSE)
-      X_subsample <- X[subsample_indices, ]
-      y_subsample <- y[subsample_indices]
-      data_subsample <- list(x = X_subsample, y = y_subsample)
-      subsample_model <- SGL(data_subsample,groups, type="logit",lambdas = lambda,nlam = 1,standardize = TRUE, verbose = FALSE, alpha = 0)
-      beta <- subsample_model$beta
-      
-      # per ogni gruppo controllo se almeno un coefficiente è non nullo
-      for (gr in 1:num_groups) 
-      {
-        # tutti i coefficienti del gruppo gr (lunghezza 18)
-        beta_gr <- beta[groups == gr]
-        if (any(beta_gr != 0)) 
-        {
-          selection_frequencies[lambda_idx,gr] <- selection_frequencies[lambda_idx,gr] + 1
-        }
-      }
-    }
+    related_correlations <- correlation_df[correlation_df$Var1 == x | correlation_df$Var2 == x, ]
+    related_correlations_not_selected <- related_correlations[
+      xor(related_correlations$Var1 %in% S_alpha, related_correlations$Var2 %in% S_alpha), 
+    ]
+    sum_related_correlations = sum(related_correlations$abs_value)
+    sum_related_correlations_not_selected = sum(related_correlations_not_selected$abs_value)
+    
+    pi_x[x] <- 1-ifelse(sum_related_correlations == 0, 0, sum_related_correlations_not_selected/sum_related_correlations)
+    
   }
-  selection_probabilities <- selection_frequencies / num_subsamples
-  max_selection_probabilities <- apply(selection_probabilities, 2, max)
-  max_selection_probabilities
-  stable_groups <- which(max_selection_probabilities >= thr)
-  return(stable_groups)
+  
+  pi_alpha <-ifelse(length(S_alpha) == 0, 0, sum(pi_x)/length(S_alpha))
+  sigma_alpha = 1-length(S_alpha)/450
+  phi_alpha = pi_alpha*sigma_alpha
+  return(phi_alpha)
 }
 
-groups <- rep(1:25, each = 18) 
-groups <- rep(1:18, times = 25)
+nlambda = 50
+nalpha = 50
+alphas = seq(from = 0, to = 0.003, length.out = nalpha)
+#alphas = alphas[-1]
+phis <- data.frame(alpha = numeric(0), lambda = numeric(0), phi = numeric(0))
 
-sg = group_stability_selection(X,y,groups, num_subsamples = 20, nlam = 2)
-sg
+for (alpha in alphas) 
+{
+  elastic_net_model <- glmnet(X, y, alpha = alpha, nlambda = nlambda, family = "binomial",standardize = TRUE)
+  lambdas <- elastic_net_model$lambda
+  for (lambda in lambdas)
+  {
+    coef_enet <- coef(elastic_net_model,s = lambda)
+    coef_values <- as.vector(coef_enet[-1])  
+    names(coef_values) <- rownames(coef_enet)[-1] 
+    S_alpha <- names(coef_values[coef_values != 0])
+    phi = phi_(S_alpha = S_alpha)
+    phis <- rbind(phis, data.frame(alpha = alpha, lambda = lambda, phi = phi))
+    cat("alpha:",alpha,"lambda:",lambda,  "phi:", phi,"\n")
+  }
+  
+}
+max_row <- phis[which.max(phis$phi), ]
+max_row
+
+
+########################
+grid_alpha <- seq(min(phis$alpha), max(phis$alpha), length.out = 100)
+grid_lambda <- seq(min(phis$lambda), max(phis$lambda), length.out = 100)
+grid_matrix <- expand.grid(alpha = grid_alpha, lambda = grid_lambda)
+
+
+
+
+#######################################################
+
+library(plotly)
+
+# Reshape the predicted surface for plotting
+z_matrix <- matrix(grid_matrix$phi_pred, 
+                   nrow = length(unique(grid_matrix$lambda)), 
+                   ncol = length(unique(grid_matrix$alpha)))
+
+# 3D plot with surface and original data points
+plot_ly() %>%
+  add_surface(
+    x = ~unique(grid_matrix$alpha),
+    y = ~unique(grid_matrix$lambda),
+    z = ~z_matrix,
+    colorscale = "Viridis",
+    showscale = TRUE
+  ) %>%
+  add_markers(
+    data = phis,
+    x = ~alpha,
+    y = ~lambda,
+    z = ~phi,
+    marker = list(size = 2, color = "black"),
+    name = "Original φ"
+  ) %>%
+  layout(
+    title = "Smoothed φ Surface with Original Points",
+    scene = list(
+      xaxis = list(title = "α"),
+      yaxis = list(title = "λ"),
+      zaxis = list(title = "φ")
+    )
+  )
+
+########################
+
+library(plotly)
+
+plot_ly(
+  data = phis,
+  x = ~alpha,
+  y = ~lambda,
+  z = ~phi,
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 3, color = ~phi, colorscale = "Viridis", showscale = TRUE)
+) %>%
+  layout(
+    title = "3D Scatter Plot of φ by α and λ",
+    scene = list(
+      xaxis = list(title = "α"),
+      yaxis = list(title = "λ"),
+      zaxis = list(title = "φ")
+    )
+  )
+
+
+#         alpha    lambda       phi
+#     0.1666667 0.9457503 0.7128748
+#     0.2040816 0.7086085 0.7479630
+#     0.01010101 21.86377 0.7940206 
+#     0.002020202 109.3189 0.7940206 con abs2 alpha va verso lo 0 e lambda è piu grande
+##################### ELASTIC NET STABILITY SELECTION ##########################
